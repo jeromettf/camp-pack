@@ -869,6 +869,9 @@
           } }, '되살리기'));
       }));
   }
+  function editBtn(l) {
+    return h('button.rm.ed', { 'aria-label': l.name + ' 수정', title: '이름·수량·카테고리 수정', onclick: function (e) { e.stopPropagation(); editLine(l); } }, '✏️');
+  }
   function rmBtn(l) {
     return h('button.rm', { 'aria-label': l.name + ' 빼기', title: '이번 캠핑에서 빼기', onclick: function (e) { e.stopPropagation(); removeLines([l]); } }, '✕');
   }
@@ -904,7 +907,8 @@
           g.lines.map(function (l) {
             var tog = R.isTogether(l);
             if (sel.on) return selRow(l, sel, h('span.pill' + (tog ? '' : '.ps'), tog ? '공용' : '우리 전용'));
-            return h('div.srow', h('div.txt', h('div.nm', l.name, R.num(l.qty, 1) > 1 ? h('span.qty', '×' + l.qty) : null)),
+            return h('div.srow', h('div.txt.tap', { onclick: function () { editLine(l); } }, h('div.nm', l.name, R.num(l.qty, 1) > 1 ? h('span.qty', '×' + l.qty) : null)),
+              editBtn(l),
               h('div.seg2', h('button', { class: tog ? '' : 'on', onclick: function () { if (tog) setTogether([l], false); } }, '우리 전용'),
                 h('button', { class: tog ? 'on' : '', onclick: function () { if (!tog) setTogether([l], true); } }, '공용')),
               rmBtn(l));
@@ -936,7 +940,7 @@
             return h('div.srow', { onclick: function () { assignOne(l, parties); } },
               h('div.txt', h('div.nm', l.name, R.num(l.qty, 1) > 1 ? h('span.qty', '×' + l.qty) : null),
                 R.isChecked(l) ? h('small', '✓ 챙김') : l.note ? h('small', l.note) : null),
-              partyPill(l, parties), rmBtn(l));
+              partyPill(l, parties), editBtn(l), rmBtn(l));
           }));
       }),
       sel.on ? null : askCard(t, lines),
@@ -945,11 +949,11 @@
   function assignOne(l, parties) {
     var close = U.sheet(l.name + ' — 어느 가족이?', h('div.chips',
       parties.map(function (p) { return { name: p.name, label: (p.name === '우리' ? '🏠 ' : '🤝 ') + p.label }; })
-        .concat([{ name: '미정', label: '🤔 미정' }, { name: '__mine', label: '🏠 우리 전용으로 옮기기' }, { name: '__del', label: '🗑️ 이번 캠핑에서 빼기' }]).map(function (p) {
+        .concat([{ name: '미정', label: '🤔 미정' }, { name: '__edit', label: '✏️ 이름·수량·카테고리 수정' }, { name: '__mine', label: '🏠 우리 전용으로 옮기기' }, { name: '__del', label: '🗑️ 이번 캠핑에서 빼기' }]).map(function (p) {
           var on = p.name.indexOf('__') === 0 ? false : (l.party === '미정' ? p.name === '미정' : partyOf(l) === p.name);
           return h('button', { class: 'chip' + (on ? ' on' : '') + (p.name === '__del' ? ' danger' : ''), type: 'button', onclick: function () {
-            if (p.name === '__mine') setTogether([l], false); else if (p.name === '__del') removeLines([l]); else assignTo([l], p.name);
             close();
+            if (p.name === '__edit') editLine(l); else if (p.name === '__mine') setTogether([l], false); else if (p.name === '__del') removeLines([l]); else assignTo([l], p.name);
           } }, p.label);
         })));
   }
@@ -1093,10 +1097,19 @@
       pBox.appendChild(U.chips(opts, [party], function (v) { party = v; drawParty(); }));
     }
     drawParty();
+    var cat = l.category || '안전·기타', cBox = h('div');
+    function drawCat() {
+      cBox.innerHTML = '';
+      var cs = categories().filter(function (c) { return l.kind === '할일' || c !== '할 일'; });
+      if (cs.indexOf(cat) < 0) cs.push(cat);
+      cBox.appendChild(U.chips(cs, [cat], function (v) { cat = v; drawCat(); }));
+    }
+    drawCat();
     var it = itemOf(l);
     var close = U.sheet(l.name, [
       U.field('이름 (이번 캠핑만)', name),
       U.field('수량', qBox),
+      l.kind === '할일' ? null : U.field('카테고리', cBox),
       comps.length && l.kind !== '할일' ? U.field('우리 전용 / 공용 배정', pBox, '우리 전용은 동행 가족에게 안 보여요. 공용은 가져올 가족을 고르세요.') : null,
       U.field('메모', note),
       productOf(it) ? h('p.hint', '제품: ' + productOf(it) + (it.owned ? ' · 보유 ' + it.owned + '개' : '')) : null,
@@ -1106,6 +1119,7 @@
       h('button.btn.danger', { onclick: function () { close(); removeLines([l]); } }, '이번 캠핑에서 빼기'),
       h('button.btn.primary', { onclick: function () {
         var set = { name: name.value.trim() || l.name, qty: String(qty), note: note.value };
+        if (l.kind !== '할일') set.category = cat;
         if (comps.length && l.kind !== '할일') {
           if (party === '__mine') { set.shared = ''; set.party = ''; } else { set.shared = 'Y'; set.party = party; }
         }
