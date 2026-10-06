@@ -315,3 +315,13 @@ label.toggle input, label.inline input { width: 20px; height: 20px; accent-color
 .hero-trip .mini .ok { color: var(--accent); }
 details.more > summary small, .checks summary small { font-weight: 400; color: var(--muted); }
 .split .grp-head { position: static; }
+
+/* v1.5: 나눠 챙길 준비물 */
+.sharetag { margin-left: 6px; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); vertical-align: middle; }
+.splitrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; margin-bottom: 6px;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--card); cursor: pointer; }
+.splitrow > div { display: flex; flex-direction: column; min-width: 0; }
+.splitpill { flex: none; font-size: 13px; font-weight: 700; padding: 6px 10px; border-radius: 99px; background: var(--chip); color: var(--muted); }
+.splitrow.on { border-color: var(--accent); }
+.splitrow.on .splitpill { background: var(--accent); color: var(--accent-ink); }
+.chip.private { background: none; border: 1px dashed var(--line); }
