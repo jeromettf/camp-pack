@@ -273,8 +273,8 @@
           onclick: function () {
             var n = name.value.trim(); if (!n) { name.focus(); return; }
             var id = S.uid('M');
-            S.mutate([{ t: 'members', id: id, set: { name: n, type: type, active: 'Y' } }]);
             S.setCfg({ me: id, meName: n });
+            S.mutate([{ t: 'members', id: id, set: { name: n, type: type, active: 'Y' } }]);
             go('#/'); rerender();
           },
         }, '시작하기')));
