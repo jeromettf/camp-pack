@@ -369,3 +369,18 @@ b.warn, .mini .warn { color: var(--warn); }
 .srow .rm:active { background: var(--chip); color: var(--danger); }
 .chip.danger { color: var(--danger); background: none; border: 1px solid var(--danger); }
 .removed summary small { font-weight: 400; color: var(--muted); }
+
+/* 동행 가족 색 (🔵🟣🟢🟤🟡🔴 순서) */
+.fc0 { --fc: #2563a8; --fcs: #e2ecf8; } .fc1 { --fc: #7a45b0; --fcs: #efe6f8; } .fc2 { --fc: #1f7a3a; --fcs: #ddf1e2; }
+.fc3 { --fc: #87563a; --fcs: #f1e6de; } .fc4 { --fc: #8f7200; --fcs: #faf1c8; } .fc5 { --fc: #c0392b; --fcs: #fbe3e0; }
+@media (prefers-color-scheme: dark) {
+  .fc0 { --fc: #86b6ee; --fcs: #1c2b3e; } .fc1 { --fc: #c09ded; --fcs: #2c2239; } .fc2 { --fc: #7fd394; --fcs: #1b3323; }
+  .fc3 { --fc: #d0a283; --fcs: #33271f; } .fc4 { --fc: #e8cd5c; --fcs: #35301a; } .fc5 { --fc: #f28e84; --fcs: #3a1f1d; }
+}
+.pill[class*="fc"], .mini .fam[class*="fc"] { background: var(--fcs); color: var(--fc); font-weight: 600; }
+.mini .fam { border-radius: 99px; padding: 2px 8px; }
+.chip[class*="fc"]:not(.on) { border-color: var(--fc); color: var(--fc); }
+.chip[class*="fc"].on { background: var(--fc); color: #fff; }
+.famcard[class*="fc"] { border-left: 6px solid var(--fc); }
+.grp-head[class*="fc"] b { color: var(--fc); }
+.meta .priv { color: var(--warn); }

@@ -313,14 +313,14 @@
     var mine = R.ourLines(lines), done = mine.filter(R.isChecked).length, und = undecidedOf(lines);
     var fams = comps.map(function (c) {
       var ls = R.liveLines(lines).filter(function (l) { return l.party === c.name; });
-      return c.name + ' ' + ls.filter(R.isChecked).length + '/' + ls.length;
+      return h('span.fam' + famCls(comps, c.name), famIcon(comps, c.name) + ' ' + c.name + ' ' + ls.filter(R.isChecked).length + '/' + ls.length);
     });
     return h('div.card.hero-trip',
       h('div.trip-head', h('div', h('b', t.title), h('small', [pl ? pl.name : '', U.range(t.start, t.end)].filter(Boolean).join(' · '))),
         h('span.badge' + (phase(t) === '진행중' ? '.live' : ''), dday(t))),
       h('div.now', h('small', ourName()), h('b', mine.length ? (mine.length - done ? (mine.length - done) + '개 남음' : '모두 챙겼어요 ✓') : '목록 불러오는 중')),
       U.bar(done, mine.length),
-      fams.length || und.length ? h('div.mini', fams.map(function (f) { return h('span', '🤝 ' + f); }),
+      fams.length || und.length ? h('div.mini', fams,
         und.length ? h('span.warn', '미정 ' + und.length) : null) : null,
       h('div.row2',
         h('a.btn.primary.big', { href: '#/trip/' + t.id, onclick: function () { setTripTab(t.id, 'check'); } }, '체크리스트'),
@@ -838,13 +838,13 @@
     var ids = Object.keys(SEL.ids), chosen = R.liveLines(lines).filter(function (l) { return SEL.ids[l.id]; });
     var acts = SEL.step === 1
       ? [{ label: '🏠 우리 전용으로', fn: function (ls) { setTogether(ls, false); } }, { label: '🤝 공용으로', fn: function (ls) { setTogether(ls, true); } }]
-      : partyList(t).map(function (p) { return { label: (p.name === '우리' ? '🏠 ' : '🤝 ') + p.label, fn: function (ls) { assignTo(ls, p.name); } }; })
+      : partyList(t).map(function (p) { return { label: p.icon + ' ' + p.label, cls: p.cls, fn: function (ls) { assignTo(ls, p.name); } }; })
         .concat([{ label: '🤔 미정', fn: function (ls) { assignTo(ls, '미정'); } }]);
     acts.push({ label: '🗑️ 이번 캠핑에서 빼기', danger: true, silent: true, fn: removeLines });
     return h('div.selbar',
       h('div.kv', h('b', ids.length ? ids.length + '개 선택' : '항목을 고르세요'), h('button.btn.small', { onclick: function () { SEL = null; rerender(); } }, '닫기')),
       h('div.chips', acts.map(function (a) {
-        return h('button.chip' + (a.danger ? '.danger' : ''), { type: 'button', disabled: !chosen.length, onclick: function () {
+        return h('button.chip' + (a.danger ? '.danger' : '') + (a.cls || ''), { type: 'button', disabled: !chosen.length, onclick: function () {
           a.fn(chosen); if (!a.silent) U.toast(chosen.length + '개 → ' + a.label); SEL.ids = {}; rerender();
         } }, a.label);
       })));
@@ -921,7 +921,7 @@
 
   function partyPill(l, parties) {
     var p = l.party === '미정' ? null : parties.filter(function (x) { return x.name === partyOf(l); })[0];
-    return h('span.pill' + (!p ? '.pn' : p.name === '우리' ? '.ps' : ''), p ? p.label : '미정');
+    return h('span.pill' + (!p ? '.pn' : p.name === '우리' ? '.ps' : p.cls), p ? p.icon + ' ' + p.label : '🤔 미정');
   }
   function whoStep(t, lines) {
     var parties = partyList(t), list = R.liveLines(lines).filter(R.isTogether);
@@ -948,10 +948,10 @@
   }
   function assignOne(l, parties) {
     var close = U.sheet(l.name + ' — 어느 가족이?', h('div.chips',
-      parties.map(function (p) { return { name: p.name, label: (p.name === '우리' ? '🏠 ' : '🤝 ') + p.label }; })
+      parties.map(function (p) { return { name: p.name, label: p.icon + ' ' + p.label, cls: p.cls }; })
         .concat([{ name: '미정', label: '🤔 미정' }, { name: '__edit', label: '✏️ 이름·수량·카테고리 수정' }, { name: '__mine', label: '🏠 우리 전용으로 옮기기' }, { name: '__del', label: '🗑️ 이번 캠핑에서 빼기' }]).map(function (p) {
           var on = p.name.indexOf('__') === 0 ? false : (l.party === '미정' ? p.name === '미정' : partyOf(l) === p.name);
-          return h('button', { class: 'chip' + (on ? ' on' : '') + (p.name === '__del' ? ' danger' : ''), type: 'button', onclick: function () {
+          return h('button', { class: 'chip' + (on ? ' on' : '') + (p.name === '__del' ? ' danger' : '') + (p.cls ? ' ' + p.cls.slice(1) : ''), type: 'button', onclick: function () {
             close();
             if (p.name === '__edit') editLine(l); else if (p.name === '__mine') setTogether([l], false); else if (p.name === '__del') removeLines([l]); else assignTo([l], p.name);
           } }, p.label);
@@ -973,8 +973,8 @@
       U.bar(done, total),
       cards.map(function (c) {
         var left = c.ls.filter(function (l) { return !R.isChecked(l); });
-        return h('div.card.famcard', { onclick: function () { if (c.p.name === '우리') { setTripTab(t.id, 'check'); rerender(); } else famSheet(t, c); } },
-          h('div.kv', h('b', (c.p.name === '우리' ? '🏠 ' : '🤝 ') + c.p.label), h('span', c.done + '/' + c.ls.length)),
+        return h('div.card.famcard' + c.p.cls, { onclick: function () { if (c.p.name === '우리') { setTripTab(t.id, 'check'); rerender(); } else famSheet(t, c); } },
+          h('div.kv', h('b', c.p.icon + ' ' + c.p.label), h('span', c.done + '/' + c.ls.length)),
           U.bar(c.done, c.ls.length),
           h('small', !c.ls.length ? '맡은 게 없어요' : left.length ? '남음: ' + names(left) : '모두 챙겼어요 ✓'));
       }),
@@ -983,7 +983,7 @@
       h('button.btn.wide', { onclick: function () { U.sheet('동행 가족 링크', linkCard(t, lines, parties)); } }, '🔗 동행 가족에게 링크 보내기')];
   }
   function famSheet(t, c) {
-    U.sheet('🤝 ' + c.p.label + ' (' + c.done + '/' + c.ls.length + ')', [
+    U.sheet(c.p.icon + ' ' + c.p.label + ' (' + c.done + '/' + c.ls.length + ')', [
       h('p.hint', c.p.label + '이(가) 전용 링크로 체크하면 여기에 반영돼요.'),
       c.ls.map(function (l) { return h('div.srow' + (R.isChecked(l) ? '.done' : ''), h('span.ck', R.isChecked(l) ? '✓' : ''), h('div.txt', h('div.nm', l.name, R.num(l.qty, 1) > 1 ? h('span.qty', '×' + l.qty) : null))); }),
       h('button.btn.wide', { onclick: function () { U.closeSheets(); U.sheet('동행 가족 링크', linkCard(t, S.linesOf(t.id), partyList(t))); } }, '🔗 링크 보내기·끄기'),
@@ -1093,7 +1093,7 @@
     function drawParty() {
       pBox.innerHTML = '';
       var opts = [{ value: '__mine', label: '🏠 우리 전용' }, { value: '우리', label: '🤝 공용 · ' + ourName() }]
-        .concat(comps.map(function (c) { return { value: c.name, label: '🤝 공용 · ' + c.name }; })).concat([{ value: '미정', label: '🤝 공용 · 미정' }]);
+        .concat(comps.map(function (c) { return { value: c.name, label: famIcon(comps, c.name) + ' 공용 · ' + c.name }; })).concat([{ value: '미정', label: '🤔 공용 · 미정' }]);
       pBox.appendChild(U.chips(opts, [party], function (v) { party = v; drawParty(); }));
     }
     drawParty();
@@ -1645,7 +1645,7 @@
       }))) : null,
       comp.map(function (c, i) {
         return h('div.comp',
-          h('div.comp-head', h('b', '🤝 ' + c.name), h('button.icon', { 'aria-label': '빼기', onclick: function () { comp.splice(i, 1); save(); } }, '✕')),
+          h('div.comp-head', h('b', FAM_DOTS[i % 6] + ' ' + c.name), h('button.icon', { 'aria-label': '빼기', onclick: function () { comp.splice(i, 1); save(); } }, '✕')),
           h('div.kv', h('span', '어른'), U.stepper(R.num(c.adults, 0), function (v) { c.adults = v; save(); })),
           h('div.kv', h('span', '아이'), U.stepper(R.num(c.kids, 0), function (v) { c.kids = v; save(); })));
       }),
@@ -1684,12 +1684,20 @@
   }
 
   /* ───────── 같이 챙기기 탭 ───────── */
+  /* 동행 가족 색: 캠핑에 적힌 순서대로 🔵🟣🟢🟤🟡🔴 (우리 가족은 🏠) */
+  var FAM_DOTS = ['🔵', '🟣', '🟢', '🟤', '🟡', '🔴'];
+  function famIdx(comps, name) { for (var i = 0; i < comps.length; i++) if (comps[i].name === name) return i; return -1; }
+  function famIcon(comps, name) { if (!name || name === '우리') return '🏠'; var i = famIdx(comps, name); return i < 0 ? '🤝' : FAM_DOTS[i % 6]; }
+  function famCls(comps, name) { var i = !name || name === '우리' ? -1 : famIdx(comps, name); return i < 0 ? '' : '.fc' + (i % 6); }
+  function partiesOf(ourLabel, ourPeople, comps) {
+    return [{ name: '우리', label: ourLabel, people: ourPeople, icon: '🏠', cls: '' }].concat(comps.map(function (c) {
+      return { name: c.name, label: c.name, people: R.num(c.adults, 0) + R.num(c.kids, 0), icon: famIcon(comps, c.name), cls: famCls(comps, c.name) };
+    }));
+  }
   function partyList(t) {
     var ids = R.list(t.members);
     var ours = D().members.filter(function (m) { return ids.indexOf(m.id) >= 0 && m.type !== '반려견'; }).length;
-    return [{ name: '우리', label: ourName(), people: ours }].concat(R.parseCompanions(t.companions).map(function (c) {
-      return { name: c.name, label: c.name, people: R.num(c.adults, 0) + R.num(c.kids, 0) };
-    }));
+    return partiesOf(ourName(), ours, R.parseCompanions(t.companions));
   }
   function plabel(parties, name) { return !name || name === '우리' ? parties[0].label : name; }
   function partyOf(l) { return l.party || '우리'; }
@@ -1703,11 +1711,11 @@
   }
 
   function moneyLines(lines) {
-    return lines.filter(function (l) { return l.deleted !== 'Y' && (l.kind === '장보기' || l.kind === '정산' || R.num(l.amount, 0) > 0); });
+    return lines.filter(function (l) { return l.deleted !== 'Y' && l.scope !== '우리만' && (l.kind === '장보기' || l.kind === '정산' || R.num(l.amount, 0) > 0); });
   }
 
   function shareText(title, range, lines, parties, rule) {
-    var items = R.sharedLines(lines).filter(function (l) { return l.kind !== '정산'; });
+    var items = R.sharedLines(lines).filter(function (l) { return l.kind !== '정산' && l.scope !== '우리만'; });
     var out = ['🏕️ ' + title + ' (' + range + ') 같이 챙기기'];
     var und = items.filter(function (l) { return l.party === '미정'; });
     if (und.length) out.push('', '❓ 누가?: ' + und.map(function (l) { return l.name; }).join(', '));
@@ -1760,7 +1768,7 @@
       h('p.hint', '가족마다 다른 링크예요. 열면 로그인 없이 그 가족으로 바로 들어가서, 그 가족이 맡은 것·공용 짐·정산만 봐요. ' + U.md(until) + '에 자동으로 닫혀요.'),
       comps.map(function (c) {
         return h('div.famlink',
-          h('div', h('b', '🤝 ' + c.name), h('small', c.token ? '링크 보냄' : '아직 안 보냄')),
+          h('div', h('b', famIcon(comps, c.name) + ' ' + c.name), h('small', c.token ? '링크 보냄' : '아직 안 보냄')),
           h('button.btn.small.primary', { onclick: function () { send(c); } }, c.token ? '다시 보내기' : '📤 보내기'),
           c.token ? h('button.btn.small', { onclick: function () {
             U.ask(c.name + ' 링크 끄기', '이 가족의 링크는 더 이상 열리지 않아요. 다시 보내면 새 링크가 만들어져요.', '끄기', function () {
@@ -1924,13 +1932,14 @@
     if (!l) {
       if (!op.set.name) return;
       G.data.lines.push({ id: op.id, kind: op.set.kind || '물건', name: op.set.name, qty: '1', party: fam, addedBy: fam, shared: 'Y', source: '동행',
-        amount: op.set.amount || '', payer: op.set.amount ? fam : '' });
+        scope: op.set.scope === '우리만' ? '우리만' : '', amount: op.set.amount || '', payer: op.set.amount ? fam : '' });
       return;
     }
     if ('party' in op.set) l.party = op.set.party;
     if ('pack' in op.set) l.pack = op.set.pack ? fam + '|' + U.nowStr() : '';
     if ('amount' in op.set) { l.amount = op.set.amount; l.payer = op.set.amount ? fam : ''; }
     if ('deleted' in op.set) l.deleted = op.set.deleted ? 'Y' : '';
+    if ('scope' in op.set) { l.scope = op.set.scope === '우리만' ? '우리만' : ''; if (l.scope) { l.amount = ''; l.payer = ''; } }
   }
   function guestSend(ops) {
     ops.forEach(function (op) { guestApply(op); G.queue.push(op); });
@@ -1978,18 +1987,26 @@
     if (!fam) return h('div.page.narrow', header,
       h('div.hero', h('h1', '어느 가족이세요?'), h('p.muted', d.ourName + '와(과) 함께 챙길 짐을 정해요')),
       h('div.list', comps.map(function (c) {
-        return h('button.whobtn', { onclick: function () { try { localStorage.setItem('cp.gf.' + token, c.name); } catch (e) {} rerender(); } }, h('span', '🤝'), c.name);
+        return h('button.whobtn', { onclick: function () { try { localStorage.setItem('cp.gf.' + token, c.name); } catch (e) {} rerender(); } }, h('span', famIcon(comps, c.name)), c.name);
       })));
-    var parties = [{ name: '우리', label: d.ourName, people: d.ourPeople }].concat(comps.map(function (c) {
-      return { name: c.name, label: c.name, people: R.num(c.adults, 0) + R.num(c.kids, 0) };
-    }));
+    var parties = partiesOf(d.ourName, d.ourPeople, comps), myIcon = famIcon(comps, fam);
     var items = d.lines.filter(function (l) { return l.kind !== '정산' && l.deleted !== 'Y'; });
     var und = items.filter(function (l) { return l.party === '미정'; });
     var mine = items.filter(function (l) { return l.party === fam; });
     var done = mine.filter(function (l) { return l.pack; }).length;
-    var addIn = h('input', { type: 'text', placeholder: '우리가 더 가져갈 것 (예: 라면, 보드게임)' });
-    var kind = '물건', kindBox = h('div');
-    function drawKind() { kindBox.innerHTML = ''; kindBox.appendChild(U.seg(['물건', '장보기'], kind, function (v) { kind = v; drawKind(); })); }
+    var addIn = h('input', { type: 'text', placeholder: '우리가 더 챙길 것 (예: 라면, 아이 장화)' });
+    var kind = '물건', kindBox = h('div'), scope = '';
+    try { scope = localStorage.getItem(gKey('gs')) || ''; } catch (e) {}
+    function drawKind() {
+      kindBox.innerHTML = '';
+      kindBox.appendChild(U.seg(['물건', '장보기'], kind, function (v) { kind = v; drawKind(); }));
+      if (d.fam) {
+        kindBox.appendChild(U.seg([{ value: '', label: '🤝 모두와 공유' }, { value: '우리만', label: '🔒 우리만 보기' }], scope, function (v) {
+          scope = v; try { localStorage.setItem(gKey('gs'), v); } catch (e) {} drawKind();
+        }));
+        kindBox.appendChild(h('small.hint', scope ? '우리 가족 체크리스트에만 있어요. ' + d.ourName + '·다른 가족에게는 안 보여요.' : '모든 가족이 볼 수 있어요. "' + fam + ' 담당"으로 표시돼요.'));
+      }
+    }
     drawKind();
     function newId() { return 'L-' + randToken().slice(0, 14); }
     function gAmount(l) {
@@ -2002,23 +2019,31 @@
     return h('div.page', header,
       G.err ? h('p.err', G.err) : null,
       h('div.card.guesthead',
-        h('div.kv', h('h2', '🎒 ' + fam + ' 담당'), h('b', done + '/' + mine.length)),
+        h('div.kv', h('h2', myIcon + ' ' + fam + ' 체크리스트'), h('b', done + '/' + mine.length)),
         U.bar(done, mine.length),
         mine.length && done === mine.length ? h('p', '🎉 다 챙겼어요!') : null),
       mine.length ? mine.map(function (l) {
         return h('div.line' + (l.pack ? '.done' : ''), { onclick: function () { guestSend([{ t: 'lines', id: l.id, set: { pack: l.pack ? '' : 1 } }]); } },
           h('span.ck', l.pack ? '✓' : ''),
           h('div.txt', h('div.nm', l.name, R.num(l.qty, 1) > 1 ? h('span.qty', '×' + l.qty) : null),
-            h('div.meta', [l.kind === '장보기' ? h('span', '장보기') : null, l.note ? h('span', l.note) : null,
+            h('div.meta', [l.scope === '우리만' ? h('span.priv', '🔒 우리만') : l.addedBy === fam ? h('span', '🤝 공유') : null,
+              l.kind === '장보기' ? h('span', '장보기') : null, l.note ? h('span', l.note) : null,
               l.addedBy !== fam && l.source !== '동행' ? h('span', d.ourName + ' 부탁') : null])),
           h('button.more', { 'aria-label': '메뉴', onclick: function (e) {
             e.stopPropagation();
             var close = U.sheet(l.name, h('div.menu',
-              l.kind === '장보기' ? h('button', { onclick: function () { close(); gAmount(l); } }, '💰 금액 입력') : null,
+              l.kind === '장보기' && l.scope !== '우리만' ? h('button', { onclick: function () { close(); gAmount(l); } }, '💰 금액 입력') : null,
+              l.addedBy === fam && d.fam ? h('button', { onclick: function () { close(); guestSend([{ t: 'lines', id: l.id, set: { scope: l.scope === '우리만' ? '' : '우리만' } }]); } },
+                l.scope === '우리만' ? '🤝 모두와 공유로 바꾸기' : '🔒 우리만 보기로 바꾸기') : null,
               l.addedBy === fam ? h('button.danger', { onclick: function () { close(); guestSend([{ t: 'lines', id: l.id, set: { deleted: 1 } }]); } }, '🗑️ 삭제')
                 : h('button', { onclick: function () { close(); guestSend([{ t: 'lines', id: l.id, set: { party: '미정' } }]); } }, '↩️ 우리가 못 챙겨요 (미정으로)')));
           } }, '⋯'));
       }) : h('p.muted.center', '아래 "아직 배정 안 된 공용 준비물"에서 가져갈 것을 골라 주세요'),
+      h('div.card', h('h3', '+ 우리가 더 챙길 것'), kindBox, h('div.addrow', addIn, h('button.btn', { onclick: function () {
+        var n = addIn.value.trim(); if (!n) return;
+        guestSend([{ t: 'lines', id: newId(), set: { kind: kind, name: n, qty: 1, scope: d.fam ? scope : '' } }]);
+        U.toast(n + (d.fam && scope ? ' 추가 (🔒 우리만)' : ' 추가 (🤝 공유)'));
+      } }, '추가'))),
       und.length ? h('section.grp', h('div.grp-head', h('b', '🤔 아직 배정 안 된 공용 준비물'), h('small', und.length + '개')),
         und.map(function (l) {
           return h('div.sline',
@@ -2028,13 +2053,9 @@
       parties.filter(function (p) { return p.name !== fam; }).map(function (p) {
         var theirs = items.filter(function (l) { return partyOf(l) === p.name && l.party !== '미정'; });
         if (!theirs.length) return null;
-        return h('section.grp', h('div.grp-head', h('b', (p.name === '우리' ? '🏠 ' : '🤝 ') + p.label + ' 담당'), h('small', theirs.filter(isDone).length + '/' + theirs.length + ' 챙김')),
+        return h('section.grp', h('div.grp-head' + p.cls, h('b', p.icon + ' ' + p.label + ' 담당'), h('small', theirs.filter(isDone).length + '/' + theirs.length + ' 챙김')),
           h('p.others', theirs.map(function (l) { return (isDone(l) ? '✓ ' : '') + l.name; }).join(' · ')));
       }),
-      h('div.card', h('h3', '+ 우리가 더 가져갈 것'), kindBox, h('div.addrow', addIn, h('button.btn', { onclick: function () {
-        var n = addIn.value.trim(); if (!n) return;
-        guestSend([{ t: 'lines', id: newId(), set: { kind: kind, name: n, qty: 1 } }]);
-      } }, '추가'))),
       settleView(d.lines, parties, d.trip.splitRule || '인원', null, gAmount, function () {
         var name = h('input', { type: 'text', placeholder: '예: 장작, 캠핑장 이용료' }), amt = amountInput('');
         var close = U.sheet('우리가 낸 비용', [U.field('항목', name), U.field('금액', amt)], [h('button.btn.primary.wide', { onclick: function () {

@@ -148,9 +148,11 @@
       S.extra[tripId] = j.lines; save(LS.extra, S.extra); emit('remote');
     });
   };
+  // 동행 가족이 '우리만 보기'로 추가한 준비물은 주최 가족 화면에서 제외
+  function notPrivate(x) { return x.scope !== '우리만'; }
   S.linesOf = function (tripId) {
     var l = S.data.lines.filter(function (x) { return x.tripId === tripId; });
-    return l.length ? l : (S.extra[tripId] || []);
+    return (l.length ? l : (S.extra[tripId] || [])).filter(notPrivate);
   };
 
   /** 로그인 전·동행 가족용 요청 (가족 토큰 없이) */
