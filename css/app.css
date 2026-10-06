@@ -359,3 +359,6 @@ b.warn, .mini .warn { color: var(--warn); }
 .famcard.undec { border-color: var(--warn); background: var(--warn-soft); }
 .famcard.undec small { display: block; }
 .hero-trip .row2 { margin-top: 12px; }
+
+.splitsum .addbtn { margin-left: auto; }
+.splitsum .addbtn + .viewbtn { margin-left: 0; }
