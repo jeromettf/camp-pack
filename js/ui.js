@@ -112,7 +112,9 @@
       h('button', { type: 'button', 'aria-label': '늘리기', onclick: function () { onChange(value + 1); } }, '+'));
   }
   function field(label, input, hint) {
-    return h('label.field', h('span.lbl', label), input, hint ? h('small.hint', hint) : null);
+    // <label> 안에 버튼(칩·스테퍼)이 있으면 라벨 글자·빈 곳을 눌러도 첫 버튼이 눌림 → 입력칸 하나일 때만 label
+    var single = input && input.nodeType === 1 && /^(INPUT|SELECT|TEXTAREA)$/.test(input.tagName);
+    return h((single ? 'label' : 'div') + '.field', h('span.lbl', label), input, hint ? h('small.hint', hint) : null);
   }
   function bar(done, total) {
     var pct = total ? Math.round(done / total * 100) : 0;
