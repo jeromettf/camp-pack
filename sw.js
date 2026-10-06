@@ -1,6 +1,6 @@
 /* 오프라인용 서비스워커: 앱 화면 파일은 네트워크 우선, 실패하면 캐시 (API·날씨 요청은 건드리지 않음) */
-var CACHE = 'camp-pack-v3';
-var SHELL = ['./', 'index.html', 'css/app.css', 'js/rules.js', 'js/ui.js', 'js/store.js', 'js/app.js',
+var CACHE = 'camp-pack-v4';
+var SHELL = ['./', 'index.html', 'css/app.css', 'js/config.js', 'js/rules.js', 'js/ui.js', 'js/store.js', 'js/app.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {

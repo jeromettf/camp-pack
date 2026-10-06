@@ -21,7 +21,8 @@
   S.on = function (fn) { S.listeners.push(fn); };
   function emit(kind) { S.listeners.forEach(function (fn) { try { fn(kind); } catch (e) { console.error(e); } }); }
 
-  S.connected = function () { return !!(S.cfg.api && S.cfg.k); };
+  S.api = function () { return S.cfg.api || (window.CAMP_CONFIG && window.CAMP_CONFIG.api) || ''; };
+  S.connected = function () { return !!(S.api() && S.cfg.k); };
   S.setCfg = function (patch) { Object.assign(S.cfg, patch); save(LS.cfg, S.cfg); };
   S.reset = function () {
     Object.keys(LS).forEach(function (k) { localStorage.removeItem(LS[k]); });
@@ -61,7 +62,7 @@
     var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timer = ctrl && setTimeout(function () { ctrl.abort(); }, 25000);
     body.k = S.cfg.k;
-    return fetch(S.cfg.api, { method: 'POST', body: JSON.stringify(body), signal: ctrl && ctrl.signal, redirect: 'follow' })
+    return fetch(S.api(), { method: 'POST', body: JSON.stringify(body), signal: ctrl && ctrl.signal, redirect: 'follow' })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (j) {
         if (timer) clearTimeout(timer);
@@ -141,6 +142,12 @@
   S.linesOf = function (tripId) {
     var l = S.data.lines.filter(function (x) { return x.tripId === tripId; });
     return l.length ? l : (S.extra[tripId] || []);
+  };
+
+  /** 로그인 전·동행 가족용 요청 (가족 토큰 없이) */
+  S.publicPost = function (body) {
+    return fetch(S.api(), { method: 'POST', body: JSON.stringify(body), redirect: 'follow' })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
   };
 
   S.history = function () { return post({ op: 'history' }).then(function (j) { return j.rows; }); };

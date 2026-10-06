@@ -54,8 +54,10 @@
       else if (m.type === '반려견') c.pets++;
       else c.adults++;
     });
-    c.guestAdults = num(trip.guestAdults, 0);
-    c.guestKids = num(trip.guestKids, 0);
+    var comp = parseCompanions(trip.companions);
+    c.guestAdults = comp.length ? comp.reduce(function (s, x) { return s + num(x.adults, 0); }, 0) : num(trip.guestAdults, 0);
+    c.guestKids = comp.length ? comp.reduce(function (s, x) { return s + num(x.kids, 0); }, 0) : num(trip.guestKids, 0);
+    c.companions = comp;
     c.family = c.adults + c.kids + c.infants;
     c.total = c.family + c.guestAdults + c.guestKids;
     c.nights = Math.max(0, daysBetween(trip.start, trip.end));
@@ -77,6 +79,15 @@
     c.autoTags = auto; c.tags = tags;
     return c;
   }
+
+  /** 동행 가족: [{name, adults, kids}] (시트에는 JSON 문자열) */
+  function parseCompanions(v) {
+    if (!v) return [];
+    if (Array.isArray(v)) return v;
+    try { var a = JSON.parse(v); return Array.isArray(a) ? a.filter(function (x) { return x && x.name; }) : []; } catch (e) { return []; }
+  }
+  /** 다른 가족 담당이면 우리 짐 목록에서 제외 */
+  function isOtherParty(l) { return !!(l.party && l.party !== '우리' && l.party !== '미정'); }
 
   function uniq(a) { var s = {}; return a.filter(function (x) { if (s[x]) return false; s[x] = 1; return true; }); }
 
@@ -166,6 +177,8 @@
         owner: it.owner || '', leave: yes(it.leave) ? 'Y' : '',
         warn: L.forgot[it.id] ? 'Y' : '', note: notes.join(' · '),
         source: r.byPlace ? '장소' : '규칙',
+        shared: yes(it.shared) ? 'Y' : '',
+        party: yes(it.shared) && c.companions.length ? '미정' : '',
       });
     });
 
@@ -184,7 +197,7 @@
   function boxLinesFor(lines, boxes) {
     var used = [], seen = {};
     lines.forEach(function (l) {
-      if (l.kind === '물건' && l.box && l.deleted !== 'Y' && !seen[l.box]) { seen[l.box] = 1; used.push(l.box); }
+      if (l.kind === '물건' && l.box && l.deleted !== 'Y' && !isOtherParty(l) && !seen[l.box]) { seen[l.box] = 1; used.push(l.box); }
     });
     var order = {};
     (boxes || []).forEach(function (b, i) { order[b.name] = { id: b.id, i: num(b.order, i) }; });
@@ -229,7 +242,7 @@
 
   /** 단계별로 보여줄 항목 */
   function stageLines(lines, stage) {
-    var live = lines.filter(function (l) { return l.deleted !== 'Y'; });
+    var live = lines.filter(function (l) { return l.deleted !== 'Y' && !isOtherParty(l); });
     switch (stage) {
       case 'todo': return live.filter(function (l) { return l.kind === '할일' || l.kind === '장보기'; });
       case 'pack': return live.filter(function (l) { return l.kind === '물건'; });
@@ -306,6 +319,53 @@
     });
   }
 
+  /** 같이 챙기기 대상: 공용 짐 + 장보기 + 정산 항목 */
+  function sharedLines(lines) {
+    return lines.filter(function (l) {
+      return l.deleted !== 'Y' && (yes(l.shared) || l.kind === '장보기' || l.kind === '정산' || isOtherParty(l));
+    });
+  }
+
+  /**
+   * 정산. parties: [{name, people}] (첫 번째가 우리). rule: '가족' | '인원'
+   * 결제자 이름은 '우리' 또는 동행 가족 이름. 10원 단위 반올림.
+   */
+  function settle(lines, parties, rule) {
+    var names = parties.map(function (p) { return p.name; });
+    var paid = {}, total = 0, items = [];
+    names.forEach(function (n) { paid[n] = 0; });
+    lines.forEach(function (l) {
+      var a = Math.round(num(String(l.amount || '').replace(/[^\d.-]/g, ''), 0));
+      if (l.deleted === 'Y' || !a || !l.payer || paid[l.payer] === undefined) return;
+      paid[l.payer] += a; total += a; items.push(l);
+    });
+    var w = parties.map(function (p) { return rule === '인원' ? Math.max(0, num(p.people, 0)) : 1; });
+    var sw = w.reduce(function (s, x) { return s + x; }, 0) || 1;
+    var share = {}, bal = {};
+    parties.forEach(function (p, i) {
+      share[p.name] = Math.round(total * w[i] / sw / 10) * 10;
+      bal[p.name] = paid[p.name] - share[p.name];
+    });
+    // 반올림 차액은 가장 많이 낸 사람이 흡수
+    var diff = total - names.reduce(function (s, n) { return s + share[n]; }, 0);
+    if (diff && names.length) {
+      var top = names.slice().sort(function (a, b) { return paid[b] - paid[a]; })[0];
+      share[top] += diff; bal[top] -= diff;
+    }
+    var cred = names.filter(function (n) { return bal[n] > 0; }).map(function (n) { return { n: n, v: bal[n] }; });
+    var debt = names.filter(function (n) { return bal[n] < 0; }).map(function (n) { return { n: n, v: -bal[n] }; });
+    cred.sort(function (a, b) { return b.v - a.v; }); debt.sort(function (a, b) { return b.v - a.v; });
+    var transfers = [], i = 0, j = 0;
+    while (i < debt.length && j < cred.length) {
+      var x = Math.min(debt[i].v, cred[j].v);
+      if (x > 0) transfers.push({ from: debt[i].n, to: cred[j].n, amount: x });
+      debt[i].v -= x; cred[j].v -= x;
+      if (!debt[i].v) i++;
+      if (!cred[j].v) j++;
+    }
+    return { total: total, paid: paid, share: share, balance: bal, transfers: transfers, items: items };
+  }
+
   return {
     RULES: RULES, STAGES: STAGES, list: list, yes: yes, active: active, num: num,
     daysBetween: daysBetween, addDays: addDays, seasonTag: seasonTag, deriveContext: deriveContext,
@@ -313,5 +373,6 @@
     boxLinesFor: boxLinesFor, lineKey: lineKey, diffLines: diffLines, stageLines: stageLines,
     stageField: stageField, progress: progress, lint: lint, weatherTags: weatherTags,
     parseWeather: parseWeather, unusedSuggestions: unusedSuggestions,
+    parseCompanions: parseCompanions, isOtherParty: isOtherParty, settle: settle, sharedLines: sharedLines,
   };
 });

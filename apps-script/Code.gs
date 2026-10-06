@@ -13,7 +13,7 @@ var SCHEMA = {
     ['id', 'id'], ['kind', '종류'], ['name', '이름'], ['category', '카테고리'], ['box', '수납함'],
     ['rule', '수량규칙'], ['base', '기본수량'], ['include', '포함조건'], ['exclude', '제외조건'],
     ['leave', '두고오기쉬움'], ['consumable', '소모품'], ['stock', '재고상태'], ['owner', '담당자'],
-    ['memo', '메모'], ['active', '활성'], ['updatedAt', '수정일']] },
+    ['memo', '메모'], ['active', '활성'], ['shared', '공용'], ['updatedAt', '수정일']] },
   boxes: { sheet: '수납함', log: '수납함', cols: [
     ['id', 'id'], ['name', '이름'], ['order', '순서'], ['memo', '메모'], ['active', '활성']] },
   places: { sheet: '장소', log: '장소', cols: [
@@ -25,12 +25,13 @@ var SCHEMA = {
     ['id', 'id'], ['title', '제목'], ['start', '시작일'], ['end', '종료일'], ['placeId', '장소id'],
     ['members', '참여구성원'], ['guestAdults', '손님어른'], ['guestKids', '손님아이'], ['tagsAdd', '추가태그'],
     ['tagsRemove', '제외태그'], ['tags', '적용태그'], ['weather', '날씨'], ['status', '상태'], ['rating', '별점'],
-    ['memo', '메모'], ['reviewed', '회고완료'], ['createdBy', '생성자'], ['createdAt', '생성일'], ['updatedAt', '수정일']] },
+    ['memo', '메모'], ['reviewed', '회고완료'], ['createdBy', '생성자'], ['createdAt', '생성일'], ['updatedAt', '수정일'],
+    ['companions', '동행'], ['shareToken', '공유코드'], ['shareUntil', '공유만료'], ['splitRule', '정산방식']] },
   lines: { sheet: '체크', cols: [
     ['id', 'id'], ['tripId', '캠핑id'], ['kind', '종류'], ['itemId', '항목id'], ['name', '이름'], ['category', '카테고리'],
     ['box', '수납함'], ['qty', '수량'], ['owner', '담당자'], ['leave', '두고오기쉬움'], ['warn', '주의'], ['note', '메모'],
     ['source', '출처'], ['pack', '짐싸기'], ['load', '싣기'], ['back', '철수'], ['done', '완료'], ['deleted', '삭제'],
-    ['updatedAt', '수정일']] },
+    ['updatedAt', '수정일'], ['shared', '공용'], ['party', '담당가족'], ['amount', '금액'], ['payer', '결제'], ['addedBy', '추가한가족']] },
   reviews: { sheet: '회고', cols: [
     ['id', 'id'], ['tripId', '캠핑id'], ['itemId', '항목id'], ['name', '이름'], ['result', '결과'], ['qty', '수량'],
     ['by', '작성자'], ['at', '시각']] },
@@ -39,6 +40,15 @@ var SCHEMA = {
     ['at', '시각'], ['by', '사용자'], ['target', '대상'], ['targetId', '대상id'], ['action', '동작'], ['detail', '내용']] },
 };
 var SHEET_ORDER = ['items', 'boxes', 'places', 'members', 'trips', 'lines', 'reviews', 'settings', 'history'];
+
+/** 동행 캠핑에서 가족끼리 나눠 챙기는 공용 짐 (v1.1 마이그레이션 기본값) */
+var DEFAULT_SHARED = ['타프', '타프 폴대', '키친 테이블', '선반·랙', '돗자리', '화로대', '장작', '숯', '토치', '착화제', '그릴망',
+  '버너', '부탄가스', '코펠·냄비', '프라이팬', '그리들', '칼·도마', '집게·가위', '국자·뒤집개', '주전자', '커피 도구',
+  '양념 세트(소금·후추·오일)', '키친타월', '호일·랩·지퍼백', '설거지통', '주방세제·수세미', '물통(워터저그)', '일회용 접시·컵',
+  '메인 랜턴', '릴선(전기 연장선)', '멀티탭', '블루투스 스피커', '보드게임', '쓰레기봉투', '모기 퇴치기·모기향', '서큘레이터'];
+var LOGIN_MAX_FAIL = 10;      // 10분 안에 이만큼 틀리면
+var LOGIN_LOCK_SEC = 600;     // 10분 잠금
+var SHARE_FIELDS = ['id', 'kind', 'name', 'category', 'qty', 'note', 'party', 'pack', 'amount', 'payer', 'addedBy', 'shared', 'source'];
 
 /** 비어 있을 때만 채우는 기본값 */
 var DEFAULT_BOXES = ['텐트가방', '침구가방', '주방박스', '식기박스', '전기·조명박스', '소품박스', '세면가방', '의류가방',
@@ -66,7 +76,18 @@ function doPost(e) {
   var req;
   try { req = JSON.parse((e && e.postData && e.postData.contents) || '{}'); }
   catch (err) { return json_({ ok: false, code: 'bad_request', error: 'JSON 형식 오류' }); }
-  if (!req.k || req.k !== familyCode_()) return json_({ ok: false, code: 'auth', error: '가족 코드가 맞지 않아요' });
+  try {
+    // 로그인 전·동행 가족용 요청 (가족 코드 불필요)
+    switch (req.op) {
+      case 'meta': return json_({ ok: true, pinSet: !!props_().getProperty('PIN_HASH') });
+      case 'login': return json_(login_(req.family, req.pin));
+      case 'shareGet': return json_(shareGet_(req.s));
+      case 'shareMutate': return json_(shareMutate_(req.s, String(req.by || ''), req.ops || []));
+    }
+  } catch (err) {
+    return json_({ ok: false, code: 'server', error: String(err && err.message || err) });
+  }
+  if (!req.k || req.k !== familyCode_()) return json_({ ok: false, code: 'auth', error: '다시 로그인해 주세요' });
   try {
     switch (req.op) {
       case 'ping': return json_({ ok: true, version: version_() });
@@ -77,6 +98,7 @@ function doPost(e) {
       case 'mutate': return json_(mutate_(req.ops || [], String(req.by || '앱')));
       case 'tripLines': return json_({ ok: true, lines: readTable_('lines').filter(function (l) { return l.tripId === req.tripId; }) });
       case 'history': return json_({ ok: true, rows: readTable_('history').slice(-300).reverse() });
+      case 'setPin': return json_(setPin_(req.family, req.pin, req.currentPin));
       default: return json_({ ok: false, code: 'bad_request', error: '알 수 없는 요청: ' + req.op });
     }
   } catch (err) {
@@ -89,6 +111,7 @@ function json_(o) {
 }
 
 function bootstrap_() {
+  migrate_();
   var today = today_();
   var recentFrom = addDays_(today, -10);
   var trips = readTable_('trips');
@@ -96,7 +119,8 @@ function bootstrap_() {
   trips.forEach(function (t) { if (t.status !== '보관' && (!t.end || t.end >= recentFrom)) live[t.id] = 1; });
   return {
     ok: true, version: version_(),
-    meta: { today: today, sheetUrl: SpreadsheetApp.getActive().getUrl(), app: APP_URL },
+    meta: { today: today, sheetUrl: SpreadsheetApp.getActive().getUrl(), app: APP_URL,
+      familyName: props_().getProperty('FAMILY_NAME') || '', pinSet: !!props_().getProperty('PIN_HASH') },
     items: readTable_('items'), boxes: readTable_('boxes'), places: readTable_('places'),
     members: readTable_('members'), trips: trips, settings: readTable_('settings'),
     reviews: readTable_('reviews'),
@@ -170,6 +194,137 @@ function describe_(s, row, hdr, changes, isNew) {
   var label = {}; s.cols.forEach(function (c) { label[c[0]] = c[1]; });
   return name + ' — ' + changes.filter(function (c) { return c[0] !== 'updatedAt'; })
     .map(function (c) { return label[c[0]] + ': ' + (c[1] || '∅') + ' → ' + (c[2] || '∅'); }).join(', ');
+}
+
+/* ───────────────────────── 가족 로그인 (이름 + 6자리 PIN) ───────────────────────── */
+
+function normName_(s) { return String(s || '').replace(/\s/g, '').toLowerCase(); }
+function hashPin_(pin) {
+  var salt = props_().getProperty('PIN_SALT');
+  if (!salt) { salt = newCode_(); props_().setProperty('PIN_SALT', salt); }
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + ':' + pin, Utilities.Charset.UTF_8);
+  return bytes.map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
+}
+
+function login_(family, pin) {
+  var p = props_();
+  if (!p.getProperty('PIN_HASH')) return { ok: false, code: 'no_pin', error: '아직 가족 PIN이 설정되지 않았어요' };
+  var cache = CacheService.getScriptCache();
+  var fails = Number(cache.get('LOGIN_FAILS') || 0);
+  if (fails >= LOGIN_MAX_FAIL) return { ok: false, code: 'locked', error: '여러 번 틀려서 10분간 잠겼어요. 잠시 후 다시 시도하세요' };
+  var good = normName_(family) === normName_(p.getProperty('FAMILY_NAME')) && hashPin_(String(pin || '')) === p.getProperty('PIN_HASH');
+  if (!good) {
+    cache.put('LOGIN_FAILS', String(fails + 1), LOGIN_LOCK_SEC);
+    return { ok: false, code: 'bad_login', error: '가족 이름 또는 PIN이 맞지 않아요', left: LOGIN_MAX_FAIL - fails - 1 };
+  }
+  cache.remove('LOGIN_FAILS');
+  return { ok: true, k: familyCode_(), familyName: p.getProperty('FAMILY_NAME') };
+}
+
+/** PIN 설정·변경 (이미 로그인된 기기에서). 바꾸면 모든 기기 토큰 교체 → 다른 기기는 다시 로그인 */
+function setPin_(family, pin, currentPin) {
+  var p = props_();
+  family = String(family || '').trim();
+  if (!family || family.length > 30) return { ok: false, code: 'bad_request', error: '가족 이름을 입력하세요' };
+  if (!/^\d{6}$/.test(String(pin || ''))) return { ok: false, code: 'bad_request', error: 'PIN은 숫자 6자리예요' };
+  if (p.getProperty('PIN_HASH') && hashPin_(String(currentPin || '')) !== p.getProperty('PIN_HASH'))
+    return { ok: false, code: 'bad_login', error: '현재 PIN이 맞지 않아요' };
+  p.setProperty('FAMILY_NAME', family);
+  p.setProperty('PIN_HASH', hashPin_(String(pin)));
+  var k = newCode_();
+  p.setProperty('FAMILY_CODE', k);
+  appendHistory_([[nowStr_(), '앱', '가족 로그인', '', 'PIN 설정', '가족 이름: ' + family]]);
+  return { ok: true, k: k, familyName: family };
+}
+
+/* ───────────────────────── 같이 챙기기 (동행 가족 공유) ───────────────────────── */
+
+function shareTrip_(token) {
+  if (!token || String(token).length < 16) return null;
+  var t = readTable_('trips').filter(function (x) { return x.shareToken && x.shareToken === String(token); })[0];
+  if (!t || t.status === '보관') return null;
+  if (t.shareUntil && today_() > t.shareUntil) return null;
+  return t;
+}
+function isShared_(l) { return l.deleted !== 'Y' && (l.shared === 'Y' || l.kind === '장보기' || l.kind === '정산' || (l.party && l.party !== '우리')); }
+
+function shareGet_(token) {
+  var t = shareTrip_(token);
+  if (!t) return { ok: false, code: 'share_invalid', error: '공유가 끝났거나 잘못된 링크예요' };
+  var place = t.placeId ? readTable_('places').filter(function (p) { return p.id === t.placeId; })[0] : null;
+  var people = readTable_('members').filter(function (m) {
+    return ('' + t.members).split(',').indexOf(m.id) >= 0 && m.type !== '반려견';
+  }).length;
+  var lines = readTable_('lines').filter(function (l) { return l.tripId === t.id && isShared_(l); }).map(function (l) {
+    var o = {}; SHARE_FIELDS.forEach(function (f) { o[f] = l[f]; }); return o;
+  });
+  return { ok: true, version: version_(), ourName: props_().getProperty('FAMILY_NAME') || '우리 가족', ourPeople: people,
+    trip: { title: t.title, start: t.start, end: t.end, place: place ? place.name : '', companions: t.companions, splitRule: t.splitRule },
+    lines: lines };
+}
+
+/** 동행 가족 변경: 허용된 필드만, 담당이 '미정'일 때만 가져가기 */
+function shareMutate_(token, by, ops) {
+  var t = shareTrip_(token);
+  if (!t) return { ok: false, code: 'share_invalid', error: '공유가 끝났거나 잘못된 링크예요' };
+  var comps = [];
+  try { comps = JSON.parse(t.companions || '[]').map(function (c) { return c.name; }); } catch (e) {}
+  if (comps.indexOf(by) < 0) return { ok: false, code: 'bad_request', error: '동행 가족 이름을 선택하세요' };
+  var lines = {};
+  readTable_('lines').forEach(function (l) { if (l.tripId === t.id) lines[l.id] = l; });
+  var safe = [], rejected = 0;
+  (ops || []).slice(0, 100).forEach(function (op) {
+    if (!op || op.t !== 'lines' || !op.id || !op.set) { rejected++; return; }
+    var cur = lines[op.id], set = {};
+    if (!cur) {
+      var kind = ['물건', '장보기', '정산'].indexOf(op.set.kind) >= 0 ? op.set.kind : '물건';
+      var name = String(op.set.name || '').trim().slice(0, 60);
+      if (!name || String(op.id).indexOf('L-') !== 0) { rejected++; return; }
+      safe.push({ t: 'lines', id: op.id, set: { tripId: t.id, kind: kind, name: name, category: kind === '물건' ? '동행' : kind,
+        qty: String(Math.max(1, Number(op.set.qty) || 1)), shared: 'Y', source: '동행', addedBy: by, party: by,
+        amount: cleanAmount_(op.set.amount), payer: op.set.amount ? by : '' } });
+      return;
+    }
+    if (!isShared_(cur)) { rejected++; return; }
+    if ('party' in op.set) {
+      var to = String(op.set.party);
+      var free = !cur.party || cur.party === '미정';
+      if (to === by && (free || cur.party === by)) set.party = by;
+      else if (to === '미정' && cur.party === by) set.party = '미정';
+      else { rejected++; return; }
+    }
+    if ('pack' in op.set) {
+      if ((set.party || cur.party) !== by) { rejected++; return; }
+      set.pack = op.set.pack ? by + '|' + nowStr_() : '';
+    }
+    if ('amount' in op.set) {
+      // 금액은 자기 가족이 결제한 항목(또는 결제자 없음)에만 입력, 결제자는 항상 자기 가족
+      if (cur.payer && cur.payer !== by) { rejected++; return; }
+      set.amount = cleanAmount_(op.set.amount);
+      set.payer = set.amount ? by : '';
+    }
+    if ('deleted' in op.set) {
+      if (cur.addedBy !== by) { rejected++; return; }
+      set.deleted = op.set.deleted ? 'Y' : '';
+    }
+    if (Object.keys(set).length) safe.push({ t: 'lines', id: op.id, set: set });
+  });
+  var r = safe.length ? mutate_(safe, by + '(동행)') : { ok: true, applied: 0, version: version_() };
+  r.rejected = rejected;
+  return r;
+}
+function cleanAmount_(v) { var n = Math.round(Number(String(v == null ? '' : v).replace(/[^\d.-]/g, ''))); return n > 0 ? String(n) : ''; }
+
+/** 기존 시트를 새 버전 구조로 1회 보정 */
+function migrate_() {
+  var p = props_();
+  if (Number(p.getProperty('SCHEMA_V') || 1) >= 2) return;
+  var ops = [];
+  readTable_('items').forEach(function (i) {
+    if (!i.shared && DEFAULT_SHARED.indexOf(i.name) >= 0) ops.push({ t: 'items', id: i.id, set: { shared: 'Y' } });
+  });
+  if (ops.length) mutate_(ops, '업데이트');
+  p.setProperty('SCHEMA_V', '2');
 }
 
 /* ───────────────────────── 시트 입출력 ───────────────────────── */
@@ -261,6 +416,7 @@ function onOpen() {
     .addSeparator()
     .addItem('드롭다운 목록 새로고침', 'refreshValidations')
     .addItem('알림 메일 지금 보내보기', 'dailyJob')
+    .addItem('가족 이름·PIN 재설정', 'resetPin')
     .addItem('가족 코드 재발급 (기존 기기 연결 끊기)', 'resetCode')
     .addToUi();
 }
@@ -380,6 +536,18 @@ function resetCode() {
   if (r !== ui.Button.YES) return;
   props_().setProperty('FAMILY_CODE', newCode_());
   showInvite();
+}
+
+function resetPin() {
+  var ui = SpreadsheetApp.getUi();
+  var f = ui.prompt('가족 이름', '앱 로그인에 쓸 가족 이름 (예: 종원네캠핑)', ui.ButtonSet.OK_CANCEL);
+  if (f.getSelectedButton() !== ui.Button.OK) return;
+  var pin = ui.prompt('새 PIN', '숫자 6자리', ui.ButtonSet.OK_CANCEL);
+  if (pin.getSelectedButton() !== ui.Button.OK) return;
+  props_().deleteProperty('PIN_HASH');
+  var r = setPin_(f.getResponseText(), pin.getResponseText().trim(), '');
+  CacheService.getScriptCache().remove('LOGIN_FAILS');
+  ui.alert(r.ok ? '✅ 설정 완료 — 모든 기기에서 새 PIN으로 다시 로그인하세요.' : '⚠️ ' + r.error);
 }
 
 /** 시트에서 직접 수정한 내용 → 변경이력 기록 + 앱 새로고침 신호 */

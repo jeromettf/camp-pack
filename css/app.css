@@ -112,7 +112,7 @@ a.small { display: inline-block; font-size: 14px; margin-top: 8px; }
 .whobtn span { font-size: 26px; }
 
 /* 입력 */
-input[type=text], input[type=url], input[type=email], input[type=search], input[type=date], select, textarea {
+input[type=text], input[type=password], input[type=url], input[type=email], input[type=search], input[type=date], select, textarea {
   width: 100%; min-height: var(--tap); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
   background: var(--card); color: var(--ink); font: inherit; font-size: 16px; }
 textarea { min-height: 80px; resize: vertical; }
@@ -170,7 +170,8 @@ label.toggle input, label.inline input { width: 20px; height: 20px; accent-color
 
 /* 체크리스트 */
 .trip-page { padding-bottom: 90px; }
-.tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 4px; }
+.tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; margin-bottom: 4px; }
+.tabs button.share:not(.on) { border-color: var(--warn); }
 .tabs button { display: flex; flex-direction: column; align-items: center; padding: 8px 0; border: 1px solid var(--line); border-radius: 12px;
   background: var(--card); color: var(--muted); font: inherit; font-weight: 700; cursor: pointer; }
 .tabs button small { font-weight: 500; font-size: 12px; }
@@ -235,3 +236,30 @@ label.toggle input, label.inline input { width: 20px; height: 20px; accent-color
   display: flex; gap: 14px; align-items: center; justify-content: space-between; background: #222; color: #fff; padding: 12px 16px; border-radius: 12px; font-size: 14px;
   width: max-content; max-width: calc(100vw - 32px); box-shadow: 0 4px 16px rgba(0,0,0,.25); }
 .toast button { border: 0; background: none; color: #8fd6ad; font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; }
+
+/* v1.1: 프로필 · 동행 · 같이 챙기기 · 정산 */
+.prof { border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; padding: 0; cursor: pointer; }
+.profiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 16px; margin-top: 8px; }
+.profile { display: flex; flex-direction: column; align-items: center; gap: 8px; border: 0; background: none; color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+.profile .avatar { width: 84px; height: 84px; border-radius: 22px; display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 24px; font-weight: 800; background: var(--accent); }
+.profile.add .avatar { background: var(--chip); color: var(--muted); font-size: 40px; font-weight: 400; }
+.profile:active .avatar { transform: scale(.96); }
+.comp { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin: 8px 0; }
+.comp-head { display: flex; justify-content: space-between; align-items: center; }
+.memory { background: var(--accent-soft); }
+.undecided { color: var(--warn); font-weight: 600; }
+.sline { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 12px; margin-bottom: 6px; cursor: pointer; flex-wrap: wrap; }
+.sline .txt { flex: 1; min-width: 120px; }
+.sline .nm { font-weight: 600; }
+.sline .ck { flex: none; width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--line); display: inline-flex;
+  align-items: center; justify-content: center; font-weight: 800; color: var(--accent-ink); }
+.sline.done .ck { background: var(--accent); border-color: var(--accent); }
+.sline.done .nm { color: var(--done); text-decoration: line-through; }
+.chips.mini { margin: 0; gap: 6px; }
+.chips.mini .chip { min-height: 32px; padding: 0 10px; font-size: 13px; }
+.mrow { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; cursor: pointer; }
+.settle { margin-top: 10px; padding-top: 6px; border-top: 2px solid var(--line); }
+.transfer { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; margin-top: 8px; font-size: 15px; }
+.others { font-size: 14px; color: var(--muted); margin: 0 0 8px 4px; }
