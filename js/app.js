@@ -926,6 +926,7 @@
   function whoStep(t, lines) {
     var parties = partyList(t), list = R.liveLines(lines).filter(R.isTogether);
     var und = list.filter(function (l) { return l.party === '미정'; }), sel = selOf(t.id, 2);
+    var splitN = {}; list.forEach(function (l) { var k = l.name + '|' + (l.itemId || ''); splitN[k] = (splitN[k] || 0) + 1; });
     return [
       h('div.splitsum', h('span', '공용 준비물 ' + list.length + '개 · 미정 ', h('b.warn', String(und.length))), addBtn(t, true), selToggle(sel)),
       !sel.on && und.length ? h('button.btn.small', { onclick: function () {
@@ -939,6 +940,7 @@
             if (sel.on) return selRow(l, sel, partyPill(l, parties));
             return h('div.srow', { onclick: function () { assignOne(l, parties); } },
               h('div.txt', h('div.nm', l.name, R.num(l.qty, 1) > 1 ? h('span.qty', '×' + l.qty) : null),
+                splitN[l.name + '|' + (l.itemId || '')] > 1 ? h('small.splitnote', '👥 ' + splitN[l.name + '|' + (l.itemId || '')] + '가족 나눔' + (R.isChecked(l) ? ' · ✓ 챙김' : '')) :
                 R.isChecked(l) ? h('small', '✓ 챙김') : l.note ? h('small', l.note) : null),
               partyPill(l, parties), editBtn(l), rmBtn(l));
           }));
@@ -949,11 +951,11 @@
   function assignOne(l, parties) {
     var close = U.sheet(l.name + ' — 어느 가족이?', h('div.chips',
       parties.map(function (p) { return { name: p.name, label: p.icon + ' ' + p.label, cls: p.cls }; })
-        .concat([{ name: '미정', label: '🤔 미정' }, { name: '__edit', label: '✏️ 이름·수량·카테고리 수정' }, { name: '__mine', label: '🏠 우리 전용으로 옮기기' }, { name: '__del', label: '🗑️ 이번 캠핑에서 빼기' }]).map(function (p) {
+        .concat([{ name: '미정', label: '🤔 미정' }, { name: '__split', label: '👥 여러 가족이 나눠 가져오기' }, { name: '__edit', label: '✏️ 이름·수량·카테고리 수정' }, { name: '__mine', label: '🏠 우리 전용으로 옮기기' }, { name: '__del', label: '🗑️ 이번 캠핑에서 빼기' }]).map(function (p) {
           var on = p.name.indexOf('__') === 0 ? false : (l.party === '미정' ? p.name === '미정' : partyOf(l) === p.name);
           return h('button', { class: 'chip' + (on ? ' on' : '') + (p.name === '__del' ? ' danger' : '') + (p.cls ? ' ' + p.cls.slice(1) : ''), type: 'button', onclick: function () {
             close();
-            if (p.name === '__edit') editLine(l); else if (p.name === '__mine') setTogether([l], false); else if (p.name === '__del') removeLines([l]); else assignTo([l], p.name);
+            if (p.name === '__split') shareSplitSheet(byId('trips', l.tripId), l); else if (p.name === '__edit') editLine(l); else if (p.name === '__mine') setTogether([l], false); else if (p.name === '__del') removeLines([l]); else assignTo([l], p.name);
           } }, p.label);
         })));
   }
@@ -1089,28 +1091,16 @@
     function drawQ() { qBox.innerHTML = ''; qBox.appendChild(U.stepper(qty, function (v) { qty = v; drawQ(); }, 1)); }
     drawQ();
     var trip = byId('trips', l.tripId), comps = trip ? R.parseCompanions(trip.companions) : [];
-    var party = !R.isTogether(l) ? '__mine' : (l.party === '미정' ? '미정' : partyOf(l)), pBox = h('div');
-    function drawParty() {
-      pBox.innerHTML = '';
-      var opts = [{ value: '__mine', label: '🏠 우리 전용' }, { value: '우리', label: '🤝 공용 · ' + ourName() }]
-        .concat(comps.map(function (c) { return { value: c.name, label: famIcon(comps, c.name) + ' 공용 · ' + c.name }; })).concat([{ value: '미정', label: '🤔 공용 · 미정' }]);
-      pBox.appendChild(U.chips(opts, [party], function (v) { party = v; drawParty(); }));
-    }
-    drawParty();
-    var cat = l.category || '안전·기타', cBox = h('div');
-    function drawCat() {
-      cBox.innerHTML = '';
-      var cs = categories().filter(function (c) { return l.kind === '할일' || c !== '할 일'; });
-      if (cs.indexOf(cat) < 0) cs.push(cat);
-      cBox.appendChild(U.chips(cs, [cat], function (v) { cat = v; drawCat(); }));
-    }
-    drawCat();
+    var party = !R.isTogether(l) ? '__mine' : (l.party === '미정' ? '미정' : partyOf(l));
+    var pBox = partyChips(comps, party, function (v) { party = v; });
+    var cat = l.category || '안전·기타', cBox = catChips(cat, function (v) { cat = v; }, l.kind === '할일');
     var it = itemOf(l);
     var close = U.sheet(l.name, [
       U.field('이름 (이번 캠핑만)', name),
       U.field('수량', qBox),
       l.kind === '할일' ? null : U.field('카테고리', cBox),
       comps.length && l.kind !== '할일' ? U.field('우리 전용 / 공용 배정', pBox, '우리 전용은 동행 가족에게 안 보여요. 공용은 가져올 가족을 고르세요.') : null,
+      comps.length && l.kind !== '할일' ? h('button.btn.small', { onclick: function () { close(); shareSplitSheet(trip, l); } }, '👥 여러 가족이 나눠 가져오기') : null,
       U.field('메모', note),
       productOf(it) ? h('p.hint', '제품: ' + productOf(it) + (it.owned ? ' · 보유 ' + it.owned + '개' : '')) : null,
       it && R.safeLink(it.link) ? h('a.small', { href: R.safeLink(it.link), target: '_blank', rel: 'noopener' }, '🛒 구매 링크 열기') : null,
@@ -1127,44 +1117,131 @@
       } }, '저장')]);
   }
 
+  /** 우리 전용 / 공용·가족별 / 공용·미정 고르기 칩 */
+  function partyChips(comps, value, onPick) {
+    var box = h('div');
+    function draw() {
+      box.innerHTML = '';
+      var opts = [{ value: '__mine', label: '🏠 우리 전용' }, { value: '우리', label: '🏠 공용 · ' + ourName() }]
+        .concat(comps.map(function (c) { return { value: c.name, label: famIcon(comps, c.name) + ' 공용 · ' + c.name }; })).concat([{ value: '미정', label: '🤔 공용 · 미정' }]);
+      box.appendChild(U.chips(opts, [value], function (v) { value = v; onPick(v); draw(); }));
+    }
+    draw();
+    return box;
+  }
+  function catChips(value, onPick, withTodo) {
+    var box = h('div');
+    function draw() {
+      box.innerHTML = '';
+      var cs = categories().filter(function (c) { return withTodo || c !== '할 일'; });
+      if (value && cs.indexOf(value) < 0) cs.push(value);
+      box.appendChild(U.chips(cs, [value], function (v) { value = v; onPick(v); draw(); }));
+    }
+    draw();
+    return box;
+  }
+
   function quickAdd(t, ctx) {
-    var kind = '물건';
-    var name = h('input', { type: 'text', placeholder: '이름 (창고에서 검색)' });
-    var save = false, picked = null, category = categories()[1] || '안전·기타';
-    var kindBox = h('div'), opt = h('div');
     var comps = R.parseCompanions(t.companions);
-    // 동행 캠핑: 우리 전용 / 공용 선택 (공용 배정 단계에서 열면 공용이 기본)
-    var shared = ctx && ctx.shared != null ? !!ctx.shared : null;
-    function sharedNow() { return kind === '할일' ? false : shared != null ? shared : (kind === '장보기' || !!(picked && R.yes(picked.shared))); }
+    var kind = '물건', qty = 1, category = categories()[1] || '안전·기타', save = false, picked = null;
+    // 동행 캠핑: 공용 배정 단계에서 열면 공용·미정, 그 외에는 우리 전용이 기본
+    var party = ctx && ctx.shared ? '미정' : '__mine', partyTouched = false;
+    var name = h('input', { type: 'text', placeholder: '이름 (창고에서 검색)' });
+    var note = h('input', { type: 'text', placeholder: '메모 (선택)' });
+    var kindBox = h('div'), body = h('div');
     function draw() {
       kindBox.innerHTML = '';
-      kindBox.appendChild(U.seg(['물건', '할일', '장보기'], kind, function (v) { kind = v; if (v === '장보기') category = '음식·음료'; draw(); }));
-      if (comps.length && kind !== '할일') kindBox.appendChild(U.seg([{ value: 'own', label: '🏠 우리 전용' }, { value: 'shared', label: '🤝 공용 (미정)' }],
-        sharedNow() ? 'shared' : 'own', function (v) { shared = v === 'shared'; draw(); }));
-      opt.innerHTML = '';
-      if (!picked && kind !== '장보기') {
-        opt.appendChild(h('label.inline', h('input', { type: 'checkbox', checked: save, onchange: function (e) { save = e.target.checked; draw(); } }), ' 준비물 창고에도 저장 (다음 캠핑에도 포함)'));
-        if (save) opt.appendChild(U.field('카테고리', selectEl(categories(), category, function (v) { category = v; })));
-      } else if (picked) opt.appendChild(h('small.hint', '창고 항목: ' + picked.name + ' · ' + picked.category));
+      kindBox.appendChild(U.seg(['물건', '할일', '장보기'], kind, function (v) {
+        kind = v;
+        if (v === '장보기') { category = '음식·음료'; if (!partyTouched && comps.length) party = '미정'; }
+        draw();
+      }));
+      body.innerHTML = '';
+      var qBox = h('div'); qBox.appendChild(U.stepper(qty, function (v) { qty = v; draw(); }, 1));
+      body.appendChild(U.field('수량', qBox));
+      if (kind !== '할일') body.appendChild(U.field('카테고리', catChips(category, function (v) { category = v; })));
+      if (comps.length && kind !== '할일') body.appendChild(U.field('우리 전용 / 공용 배정', partyChips(comps, party, function (v) { party = v; partyTouched = true; }),
+        '우리 전용은 동행 가족에게 안 보여요. 공용은 가져올 가족을 고르세요.'));
+      body.appendChild(U.field('메모', note));
+      if (!picked && kind !== '장보기') body.appendChild(h('label.inline', h('input', { type: 'checkbox', checked: save, onchange: function (e) { save = e.target.checked; } }), ' 준비물 창고에도 저장 (다음 캠핑에도 포함)'));
+      else if (picked) body.appendChild(h('small.hint', '창고 항목: ' + picked.name + (productOf(picked) ? ' · ' + productOf(picked) : '')));
     }
-    var ac = U.autocomplete(name, function (q) { return itemOptions(q); }, function (o) { picked = o.item; name.value = o.item.name; kind = o.item.kind === '할일' ? '할일' : '물건'; draw(); });
+    var ac = U.autocomplete(name, function (q) { return itemOptions(q); }, function (o) {
+      picked = o.item; name.value = o.item.name; kind = o.item.kind === '할일' ? '할일' : '물건';
+      qty = Math.max(1, R.num(o.item.base, 1)); if (o.item.category) category = o.item.category;
+      if (!partyTouched && comps.length) party = R.yes(o.item.shared) ? '미정' : '__mine';
+      draw();
+    });
     name.addEventListener('input', function () { if (picked && name.value !== picked.name) { picked = null; draw(); } });
     draw();
-    var close = U.sheet('추가', [kindBox, name, ac, opt], [h('button.btn.primary.wide', { onclick: function () {
+    function add(again) {
       var n = name.value.trim(); if (!n) { name.focus(); return; }
       var ops = [], itemId = picked ? picked.id : '';
       if (!picked && save && kind !== '장보기') {
         itemId = S.uid('I');
-        ops.push({ t: 'items', id: itemId, set: { kind: kind, name: n, category: category, box: '', rule: '고정', base: '1', active: 'Y' } });
+        ops.push({ t: 'items', id: itemId, set: { kind: kind, name: n, category: kind === '할일' ? '할 일' : category, box: '', rule: '고정', base: String(qty), active: 'Y',
+          shared: comps.length && party !== '__mine' ? 'Y' : '' } });
       }
       if (picked && !R.active(picked)) ops.push({ t: 'items', id: picked.id, set: { active: 'Y' } });
-      var together = sharedNow();
-      var l = { kind: kind, itemId: itemId || S.uid('T'), name: n, category: kind === '장보기' ? '음식·음료' : picked ? picked.category : category,
-        box: '', qty: picked ? R.num(picked.base, 1) : 1, leave: '', source: kind === '장보기' ? '장보기' : '수동',
-        shared: together ? 'Y' : '', party: together && comps.length ? '미정' : '' };
+      var together = comps.length && kind !== '할일' && party !== '__mine';
+      var l = { kind: kind, itemId: itemId || S.uid('T'), name: n, category: kind === '할일' ? '할 일' : category, box: '', qty: qty, leave: '', note: note.value.trim(),
+        source: kind === '장보기' ? '장보기' : '수동', shared: together || (!comps.length && kind === '장보기') ? 'Y' : '', party: together ? party : '' };
       ops.push({ t: 'lines', id: S.uid('L'), set: lineSet(t.id, l) });
-      S.mutate(ops); close(); U.toast(n + ' 추가' + (comps.length && kind !== '할일' ? (together ? ' · 공용(미정)' : ' · 우리 전용') : ''));
-    } }, '추가')]);
+      S.mutate(ops);
+      var where = !comps.length || kind === '할일' ? '' : !together ? ' · 우리 전용' : party === '미정' ? ' · 공용(미정)' : ' · ' + plabel(partyList(t), party);
+      U.toast(n + (qty > 1 ? ' ×' + qty : '') + ' 추가' + where);
+      if (!again) { close(); return; }
+      name.value = ''; note.value = ''; picked = null; qty = 1; save = false; draw(); name.focus();
+    }
+    var close = U.sheet('준비물 추가', [kindBox, name, ac, body], [
+      h('button.btn', { onclick: function () { add(true); } }, '추가하고 하나 더'),
+      h('button.btn.primary', { onclick: function () { add(false); } }, '추가')]);
+  }
+
+  /** 같은 준비물을 여러 가족이 나눠 가져오기: 가족마다 한 줄(각자 체크) */
+  function splitGroup(l) {
+    return S.linesOf(l.tripId).filter(function (x) {
+      return x.deleted !== 'Y' && x.name === l.name && (x.itemId || '') === (l.itemId || '') && R.isTogether(x);
+    });
+  }
+  function shareSplitSheet(t, l) {
+    var parties = partyList(t), comps = R.parseCompanions(t.companions), group = splitGroup(l);
+    var rows = parties.map(function (p) { return { name: p.name, label: p.icon + ' ' + p.label, cls: p.cls } })
+      .concat([{ name: '미정', label: '🤔 미정', cls: '' }]);
+    rows.forEach(function (r) {
+      r.line = group.filter(function (x) { return (x.party === '미정' ? '미정' : partyOf(x)) === r.name; })[0] || null;
+      r.qty = r.line ? R.num(r.line.qty, 1) : 0;
+    });
+    var box = h('div'), sum = h('b');
+    function draw() {
+      box.innerHTML = '';
+      rows.forEach(function (r) {
+        box.appendChild(h('div.kv.splitrow' + r.cls, h('span.pname', r.label), U.stepper(r.qty, function (v) { r.qty = v; draw(); }, 0)));
+      });
+      var tot = rows.reduce(function (a, r) { return a + r.qty; }, 0), n = rows.filter(function (r) { return r.qty > 0; }).length;
+      sum.textContent = '합계 ' + tot + '개 · ' + n + '가족';
+    }
+    draw();
+    var close = U.sheet('👥 ' + l.name + ' 나눠 가져오기', [
+      h('p.hint', '가족마다 가져올 개수를 정하세요. 가족별로 따로 체크돼요. 0개면 그 가족 몫은 빠져요.'),
+      box, h('div.kv', h('span'), sum)], [
+      h('button.btn.primary.wide', { onclick: function () {
+        if (!rows.some(function (r) { return r.qty > 0; })) { U.toast('한 가족 이상 1개 이상 정해 주세요'); return; }
+        var ops = [], used = {};
+        rows.forEach(function (r) { if (r.line) used[r.line.id] = 1; });
+        rows.forEach(function (r) {
+          if (r.qty > 0 && r.line) ops.push({ t: 'lines', id: r.line.id, set: { qty: String(r.qty), shared: 'Y' } });
+          else if (r.qty > 0) {
+            ops.push({ t: 'lines', id: S.uid('L'), set: lineSet(t.id, { kind: l.kind, itemId: l.itemId, name: l.name, category: l.category, qty: r.qty, note: l.note,
+              source: l.source || '수동', shared: 'Y', party: r.name }) });
+          } else if (r.line) ops.push({ t: 'lines', id: r.line.id, set: { deleted: 'Y' } });
+        });
+        // 같은 가족 중복 줄은 정리
+        group.forEach(function (x) { if (!used[x.id]) ops.push({ t: 'lines', id: x.id, set: { deleted: 'Y' } }); });
+        S.mutate(ops); close();
+        var parts = rows.filter(function (r) { return r.qty > 0; });
+        U.toast(l.name + ' → ' + parts.map(function (r) { return plabel(parties, r.name) + ' ' + r.qty; }).join(', '));
+      } }, '저장')]);
   }
 
   function selectEl(opts, value, onChange, labels) {

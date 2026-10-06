@@ -384,3 +384,6 @@ b.warn, .mini .warn { color: var(--warn); }
 .famcard[class*="fc"] { border-left: 6px solid var(--fc); }
 .grp-head[class*="fc"] b { color: var(--fc); }
 .meta .priv { color: var(--warn); }
+.splitrow { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.splitrow[class*="fc"] .pname { color: var(--fc); font-weight: 600; }
+.splitnote { color: var(--accent); }
