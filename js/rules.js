@@ -278,6 +278,8 @@
       });
       if (it.rule && RULES.indexOf(it.rule) < 0) p.push('모르는 수량규칙 "' + it.rule + '"');
       if (!(num(it.base, NaN) > 0)) p.push('기본수량이 숫자가 아님');
+      if (it.owned != null && String(it.owned).trim() !== '' && !(num(it.owned, NaN) >= 0)) p.push('보유수량이 숫자가 아님');
+      if (it.link && !safeLink(it.link)) p.push('구매링크는 http로 시작해야 함');
       if (it.category && categories && !cats[it.category]) p.push('모르는 카테고리 "' + it.category + '"');
       if (it.box && boxes && !bx[it.box]) p.push('모르는 수납함 "' + it.box + '"');
       var n = String(it.name || '').trim();
@@ -318,6 +320,15 @@
       return active(it) && sets.every(function (s) { return s[it.id]; });
     });
   }
+
+  /** 보유 수량보다 필요한 수량이 많으면 부족 개수 (보유 수량 미입력이면 0) */
+  function shortage(line, item) {
+    if (!item || line.kind !== '물건' || line.deleted === 'Y' || isOtherParty(line)) return 0;
+    if (item.owned == null || String(item.owned).trim() === '') return 0;
+    return Math.max(0, num(line.qty, 1) - num(item.owned, 0));
+  }
+  /** 구매 링크는 http(s)만 허용 */
+  function safeLink(u) { return /^https?:\/\/\S+$/i.test(String(u || '').trim()) ? String(u).trim() : ''; }
 
   /** 같이 챙기기 대상: 공용 짐 + 장보기 + 정산 항목 */
   function sharedLines(lines) {
@@ -374,5 +385,6 @@
     stageField: stageField, progress: progress, lint: lint, weatherTags: weatherTags,
     parseWeather: parseWeather, unusedSuggestions: unusedSuggestions,
     parseCompanions: parseCompanions, isOtherParty: isOtherParty, settle: settle, sharedLines: sharedLines,
+    shortage: shortage, safeLink: safeLink,
   };
 });

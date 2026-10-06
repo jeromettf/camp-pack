@@ -263,3 +263,16 @@ label.toggle input, label.inline input { width: 20px; height: 20px; accent-color
 .settle { margin-top: 10px; padding-top: 6px; border-top: 2px solid var(--line); }
 .transfer { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; margin-top: 8px; font-size: 15px; }
 .others { font-size: 14px; color: var(--muted); margin: 0 0 8px 4px; }
+
+/* v1.2: 박스 단위 체크 · 제품 정보 · 부족 */
+.gck { flex: none; width: 30px; height: 30px; border-radius: 9px; border: 2px solid var(--accent); background: var(--card);
+  color: var(--accent-ink); font-weight: 800; font-size: 17px; cursor: pointer; }
+.gck.part { background: var(--accent-soft); color: var(--accent); }
+.gck.full { background: var(--accent); }
+.line .short { color: var(--warn); font-weight: 600; }
+.line .prod { color: var(--muted); }
+.line .boxtag { background: var(--chip); padding: 0 6px; border-radius: 5px; }
+.line a.buy { font-weight: 600; }
+.boxitem { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.boxitem > div { display: flex; flex-direction: column; min-width: 0; }
+.boxitem select { width: auto; min-height: 36px; font-size: 14px; padding: 4px 8px; }

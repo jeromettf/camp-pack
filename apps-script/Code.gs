@@ -13,7 +13,8 @@ var SCHEMA = {
     ['id', 'id'], ['kind', '종류'], ['name', '이름'], ['category', '카테고리'], ['box', '수납함'],
     ['rule', '수량규칙'], ['base', '기본수량'], ['include', '포함조건'], ['exclude', '제외조건'],
     ['leave', '두고오기쉬움'], ['consumable', '소모품'], ['stock', '재고상태'], ['owner', '담당자'],
-    ['memo', '메모'], ['active', '활성'], ['shared', '공용'], ['updatedAt', '수정일']] },
+    ['memo', '메모'], ['active', '활성'], ['shared', '공용'], ['updatedAt', '수정일'],
+    ['brand', '브랜드'], ['model', '제품명'], ['link', '구매링크'], ['owned', '보유수량']] },
   boxes: { sheet: '수납함', log: '수납함', cols: [
     ['id', 'id'], ['name', '이름'], ['order', '순서'], ['memo', '메모'], ['active', '활성']] },
   places: { sheet: '장소', log: '장소', cols: [

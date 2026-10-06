@@ -67,6 +67,9 @@
     var p = String(v).split('|'), t = (p[1] || '').slice(11);
     return p[0] + (t ? ' ' + t : '');
   }
+  function itemOf(l) { return l && l.itemId ? byId('items', l.itemId) : null; }
+  function productOf(it) { return it ? [it.brand, it.model].filter(Boolean).join(' ') : ''; }
+  function shortOf(l) { return R.shortage(l, itemOf(l)); }
   function sameName(n) {
     var key = String(n).replace(/\s/g, '').toLowerCase();
     return D().members.filter(function (m) { return String(m.name).replace(/\s/g, '').toLowerCase() === key; })[0];
@@ -787,7 +790,8 @@
       push('수납함', shown.filter(function (l) { return l.kind === '수납함'; }).map(function (b) {
         var n = lines.filter(function (l) { return l.kind === '물건' && l.box === b.name && l.deleted !== 'Y'; });
         n = n.filter(function (l) { return !R.isOtherParty(l); });
-        return Object.assign({ _count: n.length, _packed: n.filter(function (l) { return l.pack; }).length }, b);
+        return Object.assign({ _count: n.length, _packed: n.filter(function (l) { return l.pack; }).length,
+          _unpacked: n.filter(function (l) { return !l.pack; }) }, b);
       }).filter(function (b) { return b._count > 0; }));
       push('개별 짐', shown.filter(function (l) { return l.kind === '물건' && !l.box; }));
       if (tab === 'back') push('두고 오기 쉬운 물건', shown.filter(function (l) { return l.kind === '물건' && l.box && R.yes(l.leave); }));
@@ -798,17 +802,20 @@
   function group(g, field, all) {
     var done = g.lines.filter(function (l) { return l[field]; }).length;
     var allDone = done === g.lines.length;
+    var isBox = field === 'pack' && (local.group || 'box') === 'box' && boxes().some(function (b) { return b.name === g.name; });
     return h('section.grp',
-      h('div.grp-head', h('b', g.name), h('small', done + '/' + g.lines.length),
-        h('button.btn.small', {
+      h('div.grp-head',
+        h('button.gck' + (allDone ? '.full' : done ? '.part' : ''), {
+          'aria-label': g.name + (allDone ? ' 모두 해제' : ' 모두 체크'),
           onclick: function () {
             var targets = g.lines.filter(function (l) { return allDone ? l[field] : !l[field]; });
             var val = allDone ? '' : me() + '|' + U.nowStr();
             var prev = targets.map(function (l) { return { t: 'lines', id: l.id, set: (function () { var o = {}; o[field] = l[field] || ''; return o; })() }; });
             S.mutate(targets.map(function (l) { var o = {}; o[field] = val; return { t: 'lines', id: l.id, set: o }; }));
-            U.toast(g.name + ' ' + targets.length + '개 ' + (allDone ? '해제' : '체크'), function () { S.mutate(prev); });
+            U.toast((isBox ? '📦 ' : '') + g.name + ' ' + targets.length + '개 ' + (allDone ? '해제' : '챙김'), function () { S.mutate(prev); });
           },
-        }, allDone ? '모두 해제' : '모두 ✓')),
+        }, allDone ? '✓' : done ? '–' : ''),
+        h('b', (isBox ? '📦 ' : '') + g.name), h('small', done + '/' + g.lines.length + (isBox && allDone ? ' · 박스 준비 완료' : ''))),
       g.lines.map(function (l) { return lineRow(l, field); }));
   }
 
@@ -817,12 +824,18 @@
     var meta = [];
     if (l.owner) meta.push(h('span.owner', l.owner));
     if (l.party === '미정') meta.push(h('span.undecided', '🤝 분담 미정'));
-    if (l.kind === '수납함' && l._count != null) meta.push(h('span', '안에 ' + l._count + '개' + (l._packed < l._count ? ' (짐싸기 ' + l._packed + '/' + l._count + ')' : '')));
+    var it = itemOf(l), sh = shortOf(l);
+    if (sh) meta.push(h('span.short', '⚠️ ' + sh + '개 부족 (보유 ' + it.owned + ')'));
+    if (productOf(it) && l.kind !== '할일') meta.push(h('span.prod', productOf(it)));
+    if (field === 'pack' && (local.group || 'box') === 'cat' && l.box) meta.push(h('span.boxtag', '📦 ' + l.box));
+    if (l.source === '재고' && it && R.safeLink(it.link)) meta.push(h('a.buy', { href: R.safeLink(it.link), target: '_blank', rel: 'noopener', onclick: function (e) { e.stopPropagation(); } }, '🛒 구매 링크'));
+    if (l.kind === '수납함' && l._count != null) meta.push(h('span' + (l._packed < l._count ? '.undecided' : ''), '안에 ' + l._count + '개 · 짐싸기 ' + l._packed + '/' + l._count));
     if (l.note) meta.push(h('span', l.note));
     if (on) meta.push(h('span.by', '✓ ' + checkedBy(l[field])));
     return h('div.line' + (on ? '.done' : '') + (l.warn === 'Y' ? '.warnline' : ''), {
       onclick: function () {
         var o = {}; o[field] = on ? '' : me() + '|' + U.nowStr();
+        if (!on && field !== 'pack' && l.kind === '수납함' && l._unpacked && l._unpacked.length) { boxLoadSheet(l, field, o[field]); return; }
         S.mutate([{ t: 'lines', id: l.id, set: o }]);
         if (on) U.toast(l.name + ' 체크 해제', function () { var b = {}; b[field] = l[field]; S.mutate([{ t: 'lines', id: l.id, set: b }]); });
         if (navigator.vibrate) navigator.vibrate(10);
@@ -854,6 +867,17 @@
             '🌦️ 예보가 바뀌었어요: ' + wc.text + (wc.tags.length ? ' → ' + wc.tags.join(', ') : '') + ' — 체크리스트 확인하기'));
         }
       }
+    }
+    // 보유 수량 부족
+    var shorts = lines.filter(function (l) {
+      return l.kind === '물건' && !l.pack && shortOf(l) > 0 &&
+        !lines.some(function (x) { return x.itemId === 'T-ask-' + l.itemId && x.deleted !== 'Y'; });
+    });
+    if (shorts.length) {
+      var hasComp = R.parseCompanions(t.companions).length > 0;
+      out.push(h('a.alert.warn', { href: '#/trip/' + t.id, onclick: function () { if (hasComp) { local.tab[t.id] = 'share'; saveLocal(); setTimeout(rerender, 0); } } },
+        '🙏 갖고 있는 것보다 더 필요해요: ' + shorts.map(function (l) { return l.name + ' ' + shortOf(l) + '개'; }).join(', ') +
+        (hasComp ? ' — 동행 가족에게 부탁하기' : ' — 빌리거나 사야 해요')));
     }
     // 창고·조건 변경 감지
     var res = R.buildLines({ trip: t, items: D().items, boxes: boxes(), members: D().members, place: pl,
@@ -905,7 +929,9 @@
       U.field('담당', oBox),
       U.field('메모', note),
       inside.length ? h('div.inside', h('small.lbl', '이 수납함에 든 것'), h('p', inside.map(function (x) { return (x.pack ? '✓ ' : '· ') + x.name; }).join('  '))) : null,
-      l.itemId && byId('items', l.itemId) ? h('a.small', { href: '#/item/' + l.itemId, onclick: function () { close(); } }, '창고에서 이 준비물 규칙 편집 ›') : null,
+      productOf(itemOf(l)) ? h('p.hint', '제품: ' + productOf(itemOf(l)) + (itemOf(l).owned ? ' · 보유 ' + itemOf(l).owned + '개' : '')) : null,
+      itemOf(l) && R.safeLink(itemOf(l).link) ? h('a.small', { href: R.safeLink(itemOf(l).link), target: '_blank', rel: 'noopener' }, '🛒 구매 링크 열기') : null,
+      l.itemId && byId('items', l.itemId) ? h('a.small', { href: '#/item/' + l.itemId, onclick: function () { close(); } }, '창고에서 이 준비물 편집 ›') : null,
     ], [
       h('button.btn.danger', { onclick: function () {
         close(); S.mutate([{ t: 'lines', id: l.id, set: { deleted: 'Y' } }]);
@@ -1164,7 +1190,7 @@
       sortByOrder(Object.keys(by), categories()).forEach(function (c) {
         list.appendChild(h('section.grp', h('div.grp-head', h('b', c), h('small', by[c].length)),
           by[c].map(function (i) {
-            var meta = [i.box, i.rule && i.rule !== '고정' ? i.rule + ' ' + i.base : (R.num(i.base, 1) > 1 ? '×' + i.base : ''),
+            var meta = [productOf(i), i.box, i.owned !== '' && i.owned != null ? '보유 ' + i.owned : '', i.rule && i.rule !== '고정' ? i.rule + ' ' + i.base : (R.num(i.base, 1) > 1 ? '×' + i.base : ''),
               i.include ? '+' + i.include : '', i.exclude ? '−' + i.exclude : '', R.yes(i.consumable) ? '소모품 ' + (i.stock || '') : ''].filter(Boolean).join(' · ');
             return h('a.irow', { href: '#/item/' + i.id }, h('div', h('b', i.name), meta ? h('small', meta) : null),
               i.stock === '부족' || i.stock === '없음' ? h('span.badge.warn', i.stock) : h('span', '›'));
@@ -1188,7 +1214,8 @@
     var src = isNew ? null : byId('items', id);
     if (!isNew && !src) return empty('준비물을 찾을 수 없어요');
     if (!E || E._id !== id) {
-      E = Object.assign({ kind: '물건', name: '', category: '차량·기타', box: '', rule: '고정', base: '1', include: '', exclude: '', leave: '', consumable: '', stock: '', owner: '', memo: '', active: 'Y' }, src || {});
+      E = Object.assign({ kind: '물건', name: '', category: '차량·기타', box: '', rule: '고정', base: '1', include: '', exclude: '', leave: '', consumable: '', stock: '', owner: '', memo: '', active: 'Y',
+        brand: '', model: '', link: '', owned: '', shared: '' }, src || {});
       E._id = id;
     }
     function set(f, v) { E[f] = v; rerender(); }
@@ -1223,12 +1250,21 @@
           U.field('수량 규칙', selectEl(R.RULES, E.rule || '고정', function (v) { set('rule', v); })),
           U.field('기본 수량', U.stepper(R.num(E.base, 1), function (v) { set('base', String(v)); }, 1))),
         h('small.hint', '예) 가족 4명(어른2·아이2) 2박이면 → ' + exQty + '개')),
+      E.kind !== '할일' ? h('div.card', h('h3', '제품 정보 (선택)'),
+        h('div.row2',
+          U.field('브랜드', h('input', { type: 'text', value: E.brand, placeholder: '예: 헬리녹스', 'data-nofocus': '', oninput: function (e) { E.brand = e.target.value; } })),
+          U.field('제품명', h('input', { type: 'text', value: E.model, placeholder: '예: 체어원', 'data-nofocus': '', oninput: function (e) { E.model = e.target.value; } }))),
+        U.field('보유 수량', h('input', { type: 'text', inputmode: 'numeric', value: E.owned, placeholder: '비워두면 확인 안 함', 'data-nofocus': '',
+          oninput: function (e) { E.owned = e.target.value.replace(/[^\d]/g, ''); e.target.value = E.owned; } }), '필요 수량이 이보다 많으면 "부족" 알림'),
+        U.field('구매 링크', h('input', { type: 'url', value: E.link, placeholder: 'https://… (재구매용)', 'data-nofocus': '', oninput: function (e) { E.link = e.target.value.trim(); } }),
+          R.yes(E.consumable) ? '재고가 부족해지면 "구매" 할 일에서 바로 열 수 있어요' : null)) : null,
       h('div.card', h('h3', '언제 챙기나요?'),
         h('small.hint', '비워두면 항상 포함. 여러 개 고르면 하나라도 해당할 때 포함. 둘 다 필요하면 "조합"으로.'),
         tagEditor('include')),
       h('div.card', h('h3', '이럴 땐 빼요'), h('small.hint', '하나라도 해당하면 제외 (포함보다 우선)'), tagEditor('exclude')),
       h('div.card',
         h('label.toggle', h('input', { type: 'checkbox', checked: R.yes(E.leave), onchange: function (e) { set('leave', e.target.checked ? 'Y' : ''); } }), ' 두고 오기 쉬운 물건 (철수 때 따로 확인)'),
+        E.kind !== '할일' ? h('label.toggle', h('input', { type: 'checkbox', checked: R.yes(E.shared), onchange: function (e) { set('shared', e.target.checked ? 'Y' : ''); } }), ' 공용 짐 (동행 가족과 나눠 챙길 수 있음)') : null,
         h('label.toggle', h('input', { type: 'checkbox', checked: R.yes(E.consumable), onchange: function (e) { E.consumable = e.target.checked ? 'Y' : ''; if (E.consumable && !E.stock) E.stock = '충분'; rerender(); } }), ' 소모품 (재고 관리)'),
         R.yes(E.consumable) ? U.field('재고', U.seg(['충분', '부족', '없음'], E.stock || '충분', function (v) { set('stock', v); })) : null,
         U.field('기본 담당', U.chips(members().filter(function (m) { return m.type !== '반려견'; }).map(function (m) { return m.name; }), [E.owner], function (v, on) { set('owner', on ? v : ''); })),
@@ -1242,7 +1278,9 @@
           var dup = D().items.filter(function (i) { return i.name === n && i.id !== id; })[0];
           if (dup) { U.toast('같은 이름이 이미 있어요'); return; }
           var set2 = {};
-          ['kind', 'name', 'category', 'box', 'rule', 'base', 'include', 'exclude', 'leave', 'consumable', 'stock', 'owner', 'memo', 'active'].forEach(function (f) { set2[f] = f === 'name' ? n : E[f]; });
+          if (E.link && !R.safeLink(E.link)) { U.toast('구매 링크는 http로 시작해야 해요'); return; }
+          ['kind', 'name', 'category', 'box', 'rule', 'base', 'include', 'exclude', 'leave', 'consumable', 'stock', 'owner', 'memo', 'active',
+            'brand', 'model', 'link', 'owned', 'shared'].forEach(function (f) { set2[f] = f === 'name' ? n : (E[f] == null ? '' : E[f]); });
           if (set2.kind === '할일') set2.box = '';
           S.mutate([{ t: 'items', id: isNew ? S.uid('I') : id, set: set2 }]);
           E = null; U.toast('저장했어요'); go('#/items');
@@ -1343,11 +1381,64 @@
     return h('div.page', top('수납함'), storeTabs('#/boxes'),
       h('p.hint', '수납함(박스·가방)을 정해두면 차에 실을 때와 철수할 때 박스 단위로 빠르게 체크할 수 있어요. 순서는 체크리스트 표시 순서예요.'),
       h('button.btn.primary.wide', { onclick: function () { edit(null); } }, '+ 새 수납함'),
+      h('button.irow', { onclick: function () { boxDetail(null, edit); } },
+        h('div', h('b', '🧳 수납함 없음 (큰 짐)'), h('small', D().items.filter(function (i) { return R.active(i) && i.kind !== '할일' && !i.box; }).length + '개 · 눌러서 보기')), h('span', '›')),
       all.map(function (b, i) {
         return h('div.irow' + (R.active(b) ? '' : '.off'),
-          h('div', { onclick: function () { edit(b); } }, h('b', '📦 ' + b.name), h('small', cnt(b.name) + '개' + (b.memo ? ' · ' + b.memo : ''))),
+          h('div', { onclick: function () { boxDetail(b, edit); } }, h('b', '📦 ' + b.name), h('small', cnt(b.name) + '개' + (b.memo ? ' · ' + b.memo : '') + ' · 눌러서 내용물 보기')),
           h('div.ord', h('button.icon', { onclick: function () { move(i, -1); }, 'aria-label': '위로' }, '▲'), h('button.icon', { onclick: function () { move(i, 1); }, 'aria-label': '아래로' }, '▼')));
       }));
+  }
+
+
+  /** 싣기·철수에서 박스를 체크할 때 안의 물건이 덜 챙겨졌으면 함께 처리할지 묻기 */
+  function boxLoadSheet(l, field, val) {
+    var un = l._unpacked;
+    var close = U.sheet('📦 ' + l.name, [
+      h('p', '짐싸기에서 아직 체크 안 한 물건이 ' + un.length + '개 있어요.'),
+      h('p.hint', un.map(function (x) { return x.name + (R.num(x.qty, 1) > 1 ? '×' + x.qty : ''); }).join(', ')),
+    ], [
+      h('button.btn', { onclick: function () { var o = {}; o[field] = val; S.mutate([{ t: 'lines', id: l.id, set: o }]); close(); } }, '박스만 체크'),
+      h('button.btn.primary', { onclick: function () {
+        var o = {}; o[field] = val;
+        S.mutate([{ t: 'lines', id: l.id, set: o }].concat(un.map(function (x) { return { t: 'lines', id: x.id, set: { pack: val } }; })));
+        close(); U.toast(l.name + ' 안의 ' + un.length + '개도 챙김으로 표시했어요');
+      } }, '안의 물건도 모두 챙김'),
+    ]);
+  }
+
+  /** 수납함 내용물: 보기·넣기·옮기기·빼기 */
+  function boxDetail(b, editBox) {
+    var name = b ? b.name : '';
+    var close;
+    function render() {
+      var inside = D().items.filter(function (i) { return R.active(i) && i.kind !== '할일' && (i.box || '') === name; })
+        .sort(function (x, y) { return x.name < y.name ? -1 : 1; });
+      var others = boxes().filter(function (x) { return x.name !== name; });
+      var addIn = h('input', { type: 'text', placeholder: '이 수납함에 넣을 물건 검색', 'data-nofocus': '' });
+      var ac = U.autocomplete(addIn, function (q) {
+        q = q.toLowerCase();
+        return D().items.filter(function (i) { return R.active(i) && i.kind !== '할일' && (i.box || '') !== name && i.name.toLowerCase().indexOf(q) >= 0; })
+          .slice(0, 8).map(function (i) { return { label: i.name + (i.box ? '  (지금: ' + i.box + ')' : '  (큰 짐)'), item: i }; });
+      }, function (o) { S.mutate([{ t: 'items', id: o.item.id, set: { box: name } }]); U.toast(o.item.name + ' → ' + (name || '큰 짐')); reopen(); });
+      return [
+        h('small.hint', inside.length + '개' + (name ? ' · 체크리스트에서 이 박스를 한 번에 챙길 수 있어요' : ' · 박스에 넣지 않고 따로 싣는 짐')),
+        inside.map(function (i) {
+          var sel = h('select', { 'aria-label': i.name + ' 옮기기', onchange: function () {
+            S.mutate([{ t: 'items', id: i.id, set: { box: sel.value } }]); U.toast(i.name + ' → ' + (sel.value || '큰 짐')); reopen();
+          } }, [h('option', { value: name, selected: true }, '옮기기…')].concat(others.map(function (x) { return h('option', { value: x.name }, '📦 ' + x.name); }))
+            .concat(name ? [h('option', { value: '' }, '🧳 큰 짐 (수납함 없음)')] : []));
+          return h('div.boxitem', h('div', h('b', i.name), productOf(i) ? h('small', productOf(i)) : null), sel);
+        }),
+        h('div.addrow', addIn), ac,
+      ];
+    }
+    function reopen() { if (close) close(); rerender(); open(); }
+    function open() {
+      close = U.sheet(b ? '📦 ' + b.name : '🧳 큰 짐 (수납함 없음)', render(),
+        b ? [h('button.btn', { onclick: function () { close(); editBox(b); } }, '이름·메모·보관')] : null);
+    }
+    open();
   }
 
   /* ───────── 설정 ───────── */
@@ -1605,7 +1696,26 @@
               h('span.muted', '›'));
           }));
       }),
+      askCard(t, lines),
       settleCard(t, lines, parties, rule));
+  }
+
+  function askCard(t, lines) {
+    var shorts = lines.filter(function (l) { return l.kind === '물건' && shortOf(l) > 0; });
+    if (!shorts.length) return null;
+    return h('div.card', h('h3', '🙏 부족해요 — 동행 가족에게 부탁'),
+      h('small.hint', '부탁하면 "누가 챙길까요?"에 올라가고, 동행 가족이 "우리가 가져갈게"를 누를 수 있어요.'),
+      shorts.map(function (l) {
+        var askId = 'T-ask-' + l.itemId, asked = lines.filter(function (x) { return x.itemId === askId && x.deleted !== 'Y'; })[0];
+        var n = shortOf(l);
+        return h('div.kv', h('span', l.name + ' ' + n + '개 부족'),
+          asked ? h('span.muted', '부탁함 ✓') : h('button.btn.small', { onclick: function () {
+            var it = itemOf(l);
+            S.mutate([{ t: 'lines', id: S.uid('L'), set: lineSet(t.id, { kind: '물건', itemId: askId, name: l.name + ' (빌려주세요)', category: it ? it.category : '', box: '',
+              qty: n, shared: 'Y', party: '미정', source: '부탁', note: '우리 보유 ' + (it ? it.owned : '?') + '개' }) }]);
+            U.toast(l.name + ' ' + n + '개를 부탁 목록에 올렸어요');
+          } }, '부탁하기'));
+      }));
   }
 
   function assignSheet(l, parties) {
