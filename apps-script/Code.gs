@@ -61,7 +61,7 @@ var DEFAULT_SETTINGS = [
   ['태그_동반', '아이, 영유아, 반려견, 손님', '동반자 태그 (구성원·손님으로 자동 결정)'],
   ['태그_기간', '1박, 연박', '기간 태그 (날짜로 자동 결정)'],
   ['태그_사용자', '', '직접 만든 태그 (쉼표로 구분)'],
-  ['카테고리', '할 일, 텐트·쉘터, 침구, 가구, 주방·조리, 식기, 아이스박스·음료, 조명·전기, 난방·냉방, 화로·불, 위생·세면, 의류, 안전·의약, 아이용품, 반려견, 놀이·취미, 차량·기타', '준비물 카테고리 (표시 순서)'],
+  ['카테고리', '할 일, 음식·음료, 조리·식기, 텐트·설치, 침구, 가구, 불·난방, 조명·전기, 위생·세면, 옷·신발, 아이·반려견, 안전·기타', '준비물 카테고리 (표시 순서)'],
   ['이메일알림', 'Y', 'D-2 준비 알림·D+1 회고 요청 메일 (Y/N)'],
   ['안씀보관기준', '3', '연속으로 안 쓴 횟수가 이 값 이상이면 보관 제안'],
 ];
@@ -295,7 +295,7 @@ function shareMutate_(token, by, ops) {
       var kind = ['물건', '장보기', '정산'].indexOf(op.set.kind) >= 0 ? op.set.kind : '물건';
       var name = String(op.set.name || '').trim().slice(0, 60);
       if (!name || String(op.id).indexOf('L-') !== 0) { rejected++; return; }
-      safe.push({ t: 'lines', id: op.id, set: { tripId: t.id, kind: kind, name: name, category: kind === '물건' ? '동행' : kind,
+      safe.push({ t: 'lines', id: op.id, set: { tripId: t.id, kind: kind, name: name, category: kind === '장보기' ? '음식·음료' : kind === '정산' ? '정산' : '안전·기타',
         qty: String(Math.max(1, Number(op.set.qty) || 1)), shared: 'Y', source: '동행', addedBy: by, party: by,
         amount: cleanAmount_(op.set.amount), payer: op.set.amount ? by : '' } });
       return;
@@ -330,16 +330,38 @@ function shareMutate_(token, by, ops) {
 }
 function cleanAmount_(v) { var n = Math.round(Number(String(v == null ? '' : v).replace(/[^\d.-]/g, ''))); return n > 0 ? String(n) : ''; }
 
+/** v3: 카테고리 12개로 정리 (예전 → 새) */
+var NEW_CATEGORIES = '할 일, 음식·음료, 조리·식기, 텐트·설치, 침구, 가구, 불·난방, 조명·전기, 위생·세면, 옷·신발, 아이·반려견, 안전·기타';
+var CAT_MAP = { '할 일': '할 일', '텐트·쉘터': '텐트·설치', '침구': '침구', '가구': '가구', '주방·조리': '조리·식기', '식기': '조리·식기',
+  '아이스박스·음료': '음식·음료', '조명·전기': '조명·전기', '난방·냉방': '불·난방', '화로·불': '불·난방', '위생·세면': '위생·세면',
+  '의류': '옷·신발', '안전·의약': '안전·기타', '아이용품': '아이·반려견', '반려견': '아이·반려견', '놀이·취미': '안전·기타',
+  '차량·기타': '안전·기타', '장보기': '음식·음료', '동행': '안전·기타' };
+var NAME_CAT = { '양념 세트(소금·후추·오일)': '음식·음료', '서큘레이터': '조명·전기', '모기 퇴치기·모기향': '안전·기타' };
+function newCat_(name, cat) { return NAME_CAT[name] || CAT_MAP[cat] || cat; }
+
 /** 기존 시트를 새 버전 구조로 1회 보정 */
 function migrate_() {
-  var p = props_();
-  if (Number(p.getProperty('SCHEMA_V') || 1) >= 2) return;
+  var p = props_(), v = Number(p.getProperty('SCHEMA_V') || 1);
+  if (v >= 3) return;
   var ops = [];
-  readTable_('items').forEach(function (i) {
+  if (v < 2) readTable_('items').forEach(function (i) {
     if (!i.shared && DEFAULT_SHARED.indexOf(i.name) >= 0) ops.push({ t: 'items', id: i.id, set: { shared: 'Y' } });
   });
   if (ops.length) mutate_(ops, '업데이트');
-  p.setProperty('SCHEMA_V', '2');
+  // v3: 카테고리 정리 (준비물 + 모든 캠핑 체크 줄 + 설정의 카테고리 순서)
+  ops = [];
+  readTable_('items').forEach(function (i) { var c = newCat_(i.name, i.category); if (c !== i.category) ops.push({ t: 'items', id: i.id, set: { category: c } }); });
+  if (ops.length) mutate_(ops, '업데이트');
+  ops = [];
+  readTable_('lines').forEach(function (l) { var c = newCat_(l.name, l.category); if (c !== l.category) ops.push({ t: 'lines', id: l.id, set: { category: c } }); });
+  if (ops.length) mutate_(ops, '업데이트');
+  var cats = readTable_('settings').filter(function (r) { return r.key === '카테고리'; })[0];
+  if (cats) {
+    var old = cats.value.split(/[,，]/).map(function (x) { return x.trim(); }).filter(String);
+    var extra = old.filter(function (c) { return !CAT_MAP[c] && NEW_CATEGORIES.indexOf(c) < 0; }); // 사용자가 만든 카테고리는 유지
+    mutate_([{ t: 'settings', id: '카테고리', set: { value: NEW_CATEGORIES + (extra.length ? ', ' + extra.join(', ') : '') } }], '업데이트');
+  }
+  p.setProperty('SCHEMA_V', '3');
 }
 
 /* ───────────────────────── 시트 입출력 ───────────────────────── */
@@ -596,7 +618,7 @@ function onSheetEdit(e) {
 function dailyJob() {
   var setting = readTable_('settings').filter(function (r) { return r.key === '이메일알림'; })[0];
   if (setting && String(setting.value).toUpperCase() === 'N') return;
-  var today = today_(), d2 = addDays_(today, 2), d1 = addDays_(today, -1);
+  var today = today_(), d2 = addDays_(today, 2);
   var trips = readTable_('trips').filter(function (t) { return t.status !== '보관'; });
   var lines = null;
   var members = readTable_('members').filter(function (m) { return m.active !== 'N' && m.email; });
@@ -605,23 +627,20 @@ function dailyJob() {
   trips.forEach(function (t) {
     if (t.start === d2) {
       lines = lines || readTable_('lines');
-      var mine = lines.filter(function (l) { return l.tripId === t.id && l.deleted !== 'Y'; });
-      var todo = mine.filter(function (l) { return (l.kind === '할일' || l.kind === '장보기') && !l.done; });
-      var pack = mine.filter(function (l) { return l.kind === '물건' && !l.pack; });
-      var byOwner = {};
-      pack.forEach(function (l) { var o = l.owner || '담당 미정'; byOwner[o] = (byOwner[o] || 0) + 1; });
+      var mine = lines.filter(function (l) {
+        return l.tripId === t.id && l.deleted !== 'Y' && l.kind !== '수납함' && l.kind !== '정산' && (!l.party || l.party === '우리');
+      });
+      var left = mine.filter(function (l) { return !l.pack && !l.done; });
+      var todo = left.filter(function (l) { return l.kind === '할일' || l.kind === '장보기'; });
+      var undecided = lines.filter(function (l) { return l.tripId === t.id && l.deleted !== 'Y' && l.party === '미정'; }).length;
       var body = '<h3>🏕️ ' + esc_(t.title) + ' — 이틀 남았어요 (' + t.start + ')</h3>' +
-        '<p>남은 할 일 <b>' + todo.length + '</b>개 · 아직 안 챙긴 짐 <b>' + pack.length + '</b>개</p>' +
+        '<p>아직 안 챙긴 것 <b>' + left.length + '</b>개 (할 일·장보기 ' + todo.length + '개)' +
+        (undecided ? ' · 누가 가져올지 안 정한 것 <b>' + undecided + '</b>개' : '') + '</p>' +
         '<ul>' + todo.slice(0, 15).map(function (l) { return '<li>' + esc_(l.name) + '</li>'; }).join('') + '</ul>' +
-        '<p>' + Object.keys(byOwner).map(function (o) { return esc_(o) + ' ' + byOwner[o] + '개'; }).join(' · ') + '</p>' +
         '<p><a href="' + APP_URL + '">앱 열기</a></p>';
       MailApp.sendEmail({ to: to.join(','), subject: '[캠핑 준비] ' + t.title + ' D-2', htmlBody: body });
     }
-    if (t.end === d1 && t.reviewed !== 'Y') {
-      MailApp.sendEmail({ to: to.join(','), subject: '[캠핑 준비] ' + t.title + ' 30초 회고',
-        htmlBody: '<p>즐거운 캠핑이었나요? 안 쓴 것·부족했던 것을 30초만 기록하면 다음 준비가 더 쉬워져요.</p>' +
-          '<p><a href="' + APP_URL + '#/review/' + t.id + '">회고 남기기</a></p>' });
-    }
+
   });
 }
 

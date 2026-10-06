@@ -325,3 +325,37 @@ details.more > summary small, .checks summary small { font-weight: 400; color: v
 .splitrow.on { border-color: var(--accent); }
 .splitrow.on .splitpill { background: var(--accent); color: var(--accent-ink); }
 .chip.private { background: none; border: 1px dashed var(--line); }
+
+/* v2: 배정 · 현황 · 체크리스트 */
+.ttabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--chip); padding: 4px; border-radius: 14px; margin-bottom: 12px; }
+.ttabs button { position: relative; border: 0; background: none; padding: 10px 0; border-radius: 10px; font: inherit; font-weight: 700; font-size: 15px; color: var(--muted); cursor: pointer; }
+.ttabs button.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
+.ttabs .dot { margin-left: 4px; font-size: 11px; background: var(--warn); color: #fff; border-radius: 99px; padding: 1px 6px; vertical-align: 2px; }
+.stepseg { display: flex; gap: 6px; margin: 0 0 10px; }
+.stepseg button { flex: 1; padding: 8px 0; border: 0; border-bottom: 3px solid var(--line); background: none; font: inherit; font-weight: 700; color: var(--muted); cursor: pointer; }
+.stepseg button.on { color: var(--accent); border-bottom-color: var(--accent); }
+.splitsum { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 10px; }
+.splitsum .viewbtn { margin-left: auto; }
+.pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.pill.ps { background: var(--chip); color: var(--ink); }
+.pill.pn { background: var(--warn-soft); color: var(--warn); }
+b.warn, .mini .warn { color: var(--warn); }
+.srow { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); cursor: pointer; }
+.srow .txt { flex: 1; min-width: 0; }
+.srow .nm { font-weight: 600; }
+.srow .txt small { display: block; color: var(--muted); font-size: 12px; }
+.srow .ck { flex: none; width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: var(--accent-ink); }
+.srow.picked { border-color: var(--accent); background: var(--accent-soft); }
+.srow.picked .ck, .srow.done .ck { background: var(--accent); border-color: var(--accent); }
+.srow.done .nm { color: var(--done); text-decoration: line-through; }
+.seg2 { display: flex; flex: none; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+.seg2 button { border: 0; background: none; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.seg2 button.on { background: var(--accent); color: var(--accent-ink); }
+.selbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 12; max-width: 640px; margin: 0 auto; background: var(--card);
+  border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; padding: 12px 16px calc(env(safe-area-inset-bottom, 0px) + 12px); box-shadow: 0 -4px 16px rgba(0,0,0,.15); }
+.selbar .chip[disabled] { opacity: .4; }
+.famcard { cursor: pointer; }
+.famcard .bar { height: 10px; }
+.famcard.undec { border-color: var(--warn); background: var(--warn-soft); }
+.famcard.undec small { display: block; }
+.hero-trip .row2 { margin-top: 12px; }

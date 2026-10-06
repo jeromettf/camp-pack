@@ -190,7 +190,6 @@
       });
     });
 
-    boxLinesFor(lines, o.boxes).forEach(function (b) { lines.push(b); });
     return { ctx: c, lines: lines, excluded: excluded };
   }
 
@@ -321,6 +320,19 @@
     });
   }
 
+  /** v2: 체크는 "챙김" 하나 (예전 할 일의 done 도 챙김으로 인정) */
+  function isChecked(l) { return !!(l.pack || l.done); }
+  /** 화면에 보이는 준비물 (예전 수납함 줄·정산 항목 제외) */
+  function liveLines(lines) {
+    return lines.filter(function (l) { return l.deleted !== 'Y' && l.kind !== '수납함' && l.kind !== '정산'; });
+  }
+  /** 우리 가족 체크리스트: 우리만 + 함께 중 우리 가족 담당 */
+  function ourLines(lines) {
+    return liveLines(lines).filter(function (l) { return !l.party || l.party === '우리'; });
+  }
+  /** 함께 나눌 것 (동행 가족과 분담 대상) */
+  function isTogether(l) { return yes(l.shared) || l.kind === '장보기' || !!(l.party && l.party !== '우리'); }
+
   /** 보유 수량보다 필요한 수량이 많으면 부족 개수 (보유 수량 미입력이면 0) */
   function shortage(line, item) {
     if (!item || line.kind !== '물건' || line.deleted === 'Y' || isOtherParty(line)) return 0;
@@ -385,6 +397,6 @@
     stageField: stageField, progress: progress, lint: lint, weatherTags: weatherTags,
     parseWeather: parseWeather, unusedSuggestions: unusedSuggestions,
     parseCompanions: parseCompanions, isOtherParty: isOtherParty, settle: settle, sharedLines: sharedLines,
-    shortage: shortage, safeLink: safeLink,
+    shortage: shortage, safeLink: safeLink, isChecked: isChecked, liveLines: liveLines, ourLines: ourLines, isTogether: isTogether,
   };
 });
