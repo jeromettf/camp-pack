@@ -362,3 +362,8 @@ b.warn, .mini .warn { color: var(--warn); }
 
 .splitsum .addbtn { margin-left: auto; }
 .splitsum .addbtn + .viewbtn { margin-left: 0; }
+
+.srow .rm { flex: none; width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; color: var(--muted); font-size: 16px; cursor: pointer; }
+.srow .rm:active { background: var(--chip); color: var(--danger); }
+.chip.danger { color: var(--danger); background: none; border: 1px solid var(--danger); }
+.removed summary small { font-weight: 400; color: var(--muted); }

@@ -772,7 +772,8 @@
       und.length ? h('a.alert.warn', { href: '#/trip/' + t.id, onclick: function () { setTripTab(t.id, 'assign', 2); } },
         '🤝 배정 안 된 공용 준비물 ' + und.length + '개 (' + names(und) + ') — 배정하기') : null,
       byCategory(shown).map(function (g) { return catGroup(g.name, g.lines); }),
-      !shown.length && mine.length ? empty('남은 게 없어요. 다 챙겼어요!') : null];
+      !shown.length && mine.length ? empty('남은 게 없어요. 다 챙겼어요!') : null,
+      removedCard(lines)];
   }
 
   function catGroup(name, list) {
@@ -839,13 +840,37 @@
       ? [{ label: '🏠 우리 전용으로', fn: function (ls) { setTogether(ls, false); } }, { label: '🤝 공용으로', fn: function (ls) { setTogether(ls, true); } }]
       : partyList(t).map(function (p) { return { label: (p.name === '우리' ? '🏠 ' : '🤝 ') + p.label, fn: function (ls) { assignTo(ls, p.name); } }; })
         .concat([{ label: '🤔 미정', fn: function (ls) { assignTo(ls, '미정'); } }]);
+    acts.push({ label: '🗑️ 이번 캠핑에서 빼기', danger: true, silent: true, fn: removeLines });
     return h('div.selbar',
       h('div.kv', h('b', ids.length ? ids.length + '개 선택' : '항목을 고르세요'), h('button.btn.small', { onclick: function () { SEL = null; rerender(); } }, '닫기')),
       h('div.chips', acts.map(function (a) {
-        return h('button.chip', { type: 'button', disabled: !chosen.length, onclick: function () {
-          a.fn(chosen); U.toast(chosen.length + '개 → ' + a.label); SEL.ids = {}; rerender();
+        return h('button.chip' + (a.danger ? '.danger' : ''), { type: 'button', disabled: !chosen.length, onclick: function () {
+          a.fn(chosen); if (!a.silent) U.toast(chosen.length + '개 → ' + a.label); SEL.ids = {}; rerender();
         } }, a.label);
       })));
+  }
+  /** 이번 캠핑에서 빼기 (체크리스트에서도 사라짐) — 되돌리기 가능 */
+  function removeLines(ls) {
+    if (!ls.length) return;
+    S.mutate(ls.map(function (l) { return { t: 'lines', id: l.id, set: { deleted: 'Y' } }; }));
+    U.toast((ls.length === 1 ? ls[0].name : ls.length + '개') + ' 뺐어요', function () {
+      S.mutate(ls.map(function (l) { return { t: 'lines', id: l.id, set: { deleted: '' } }; }));
+    });
+  }
+  /** 뺀 준비물 목록 (되살리기) */
+  function removedCard(lines) {
+    var gone = lines.filter(function (l) { return l.deleted === 'Y' && l.kind !== '수납함' && l.kind !== '정산'; });
+    if (!gone.length) return null;
+    return h('details.card.removed', h('summary', '🗑️ 이번 캠핑에서 뺀 준비물 ', h('small', gone.length + '개')),
+      gone.map(function (l) {
+        return h('div.kv', h('span.muted', l.name + (R.num(l.qty, 1) > 1 ? ' ×' + l.qty : '')),
+          h('button.btn.small', { onclick: function () {
+            S.mutate([{ t: 'lines', id: l.id, set: { deleted: '' } }]); U.toast(l.name + ' 되살렸어요');
+          } }, '되살리기'));
+      }));
+  }
+  function rmBtn(l) {
+    return h('button.rm', { 'aria-label': l.name + ' 빼기', title: '이번 캠핑에서 빼기', onclick: function (e) { e.stopPropagation(); removeLines([l]); } }, '✕');
   }
   function setTogether(ls, on) {
     S.mutate(ls.map(function (l) {
@@ -881,9 +906,11 @@
             if (sel.on) return selRow(l, sel, h('span.pill' + (tog ? '' : '.ps'), tog ? '공용' : '우리 전용'));
             return h('div.srow', h('div.txt', h('div.nm', l.name, R.num(l.qty, 1) > 1 ? h('span.qty', '×' + l.qty) : null)),
               h('div.seg2', h('button', { class: tog ? '' : 'on', onclick: function () { if (tog) setTogether([l], false); } }, '우리 전용'),
-                h('button', { class: tog ? 'on' : '', onclick: function () { if (!tog) setTogether([l], true); } }, '공용')));
+                h('button', { class: tog ? 'on' : '', onclick: function () { if (!tog) setTogether([l], true); } }, '공용')),
+              rmBtn(l));
           }));
       }),
+      sel.on ? null : removedCard(lines),
       sel.on ? null : h('button.btn.primary.wide.big', { onclick: function () { local.astep[t.id] = 2; saveLocal(); rerender(); window.scrollTo(0, 0); } }, '다음: ② 공용 준비물 배정 ›'),
       sel.on ? null : h('a.small', { href: '#/split?trip=' + t.id }, '다음 캠핑에도 쓰일 기본값 바꾸기 ›')];
   }
@@ -909,18 +936,19 @@
             return h('div.srow', { onclick: function () { assignOne(l, parties); } },
               h('div.txt', h('div.nm', l.name, R.num(l.qty, 1) > 1 ? h('span.qty', '×' + l.qty) : null),
                 R.isChecked(l) ? h('small', '✓ 챙김') : l.note ? h('small', l.note) : null),
-              partyPill(l, parties));
+              partyPill(l, parties), rmBtn(l));
           }));
       }),
-      sel.on ? null : askCard(t, lines)];
+      sel.on ? null : askCard(t, lines),
+      sel.on ? null : removedCard(lines)];
   }
   function assignOne(l, parties) {
     var close = U.sheet(l.name + ' — 어느 가족이?', h('div.chips',
       parties.map(function (p) { return { name: p.name, label: (p.name === '우리' ? '🏠 ' : '🤝 ') + p.label }; })
-        .concat([{ name: '미정', label: '🤔 미정' }, { name: '__mine', label: '🏠 우리 전용으로 (공용에서 빼기)' }]).map(function (p) {
-          var on = p.name === '__mine' ? false : (l.party === '미정' ? p.name === '미정' : partyOf(l) === p.name);
-          return h('button', { class: 'chip' + (on ? ' on' : ''), type: 'button', onclick: function () {
-            if (p.name === '__mine') setTogether([l], false); else assignTo([l], p.name);
+        .concat([{ name: '미정', label: '🤔 미정' }, { name: '__mine', label: '🏠 우리 전용으로 옮기기' }, { name: '__del', label: '🗑️ 이번 캠핑에서 빼기' }]).map(function (p) {
+          var on = p.name.indexOf('__') === 0 ? false : (l.party === '미정' ? p.name === '미정' : partyOf(l) === p.name);
+          return h('button', { class: 'chip' + (on ? ' on' : '') + (p.name === '__del' ? ' danger' : ''), type: 'button', onclick: function () {
+            if (p.name === '__mine') setTogether([l], false); else if (p.name === '__del') removeLines([l]); else assignTo([l], p.name);
             close();
           } }, p.label);
         })));
@@ -1075,10 +1103,7 @@
       it && R.safeLink(it.link) ? h('a.small', { href: R.safeLink(it.link), target: '_blank', rel: 'noopener' }, '🛒 구매 링크 열기') : null,
       it ? h('a.small', { href: '#/item/' + l.itemId, onclick: function () { close(); } }, '창고에서 이 준비물 편집 ›') : null,
     ], [
-      h('button.btn.danger', { onclick: function () {
-        close(); S.mutate([{ t: 'lines', id: l.id, set: { deleted: 'Y' } }]);
-        U.toast(l.name + ' 뺐어요', function () { S.mutate([{ t: 'lines', id: l.id, set: { deleted: '' } }]); });
-      } }, '이번 캠핑에서 빼기'),
+      h('button.btn.danger', { onclick: function () { close(); removeLines([l]); } }, '이번 캠핑에서 빼기'),
       h('button.btn.primary', { onclick: function () {
         var set = { name: name.value.trim() || l.name, qty: String(qty), note: note.value };
         if (comps.length && l.kind !== '할일') {
