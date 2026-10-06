@@ -938,7 +938,7 @@
         return h('section.grp', catHead(g, sel),
           g.lines.map(function (l) {
             if (sel.on) return selRow(l, sel, partyPill(l, parties));
-            return h('div.srow', { onclick: function () { assignOne(l, parties); } },
+            return h('div.srow', { onclick: function () { assignOne(l); } },
               h('div.txt', h('div.nm', l.name, R.num(l.qty, 1) > 1 ? h('span.qty', '×' + l.qty) : null),
                 splitN[l.name + '|' + (l.itemId || '')] > 1 ? h('small.splitnote', '👥 ' + splitN[l.name + '|' + (l.itemId || '')] + '가족 나눔' + (R.isChecked(l) ? ' · ✓ 챙김' : '')) :
                 R.isChecked(l) ? h('small', '✓ 챙김') : l.note ? h('small', l.note) : null),
@@ -948,17 +948,7 @@
       sel.on ? null : askCard(t, lines),
       sel.on ? null : removedCard(lines)];
   }
-  function assignOne(l, parties) {
-    var close = U.sheet(l.name + ' — 어느 가족이?', h('div.chips',
-      parties.map(function (p) { return { name: p.name, label: p.icon + ' ' + p.label, cls: p.cls }; })
-        .concat([{ name: '미정', label: '🤔 미정' }, { name: '__split', label: '👥 여러 가족이 나눠 가져오기' }, { name: '__edit', label: '✏️ 이름·수량·카테고리 수정' }, { name: '__mine', label: '🏠 우리 전용으로 옮기기' }, { name: '__del', label: '🗑️ 이번 캠핑에서 빼기' }]).map(function (p) {
-          var on = p.name.indexOf('__') === 0 ? false : (l.party === '미정' ? p.name === '미정' : partyOf(l) === p.name);
-          return h('button', { class: 'chip' + (on ? ' on' : '') + (p.name === '__del' ? ' danger' : '') + (p.cls ? ' ' + p.cls.slice(1) : ''), type: 'button', onclick: function () {
-            close();
-            if (p.name === '__split') shareSplitSheet(byId('trips', l.tripId), l); else if (p.name === '__edit') editLine(l); else if (p.name === '__mine') setTogether([l], false); else if (p.name === '__del') removeLines([l]); else assignTo([l], p.name);
-          } }, p.label);
-        })));
-  }
+  function assignOne(l) { famAssignSheet(byId('trips', l.tripId), l); }
 
   /* 현황: 가족별 카드 */
   function statusView(t, lines) {
@@ -1100,7 +1090,7 @@
       U.field('수량', qBox),
       l.kind === '할일' ? null : U.field('카테고리', cBox),
       comps.length && l.kind !== '할일' ? U.field('우리 전용 / 공용 배정', pBox, '우리 전용은 동행 가족에게 안 보여요. 공용은 가져올 가족을 고르세요.') : null,
-      comps.length && l.kind !== '할일' ? h('button.btn.small', { onclick: function () { close(); shareSplitSheet(trip, l); } }, '👥 여러 가족이 나눠 가져오기') : null,
+      comps.length && l.kind !== '할일' ? h('button.btn.small', { onclick: function () { close(); famAssignSheet(trip, l); } }, '👥 여러 가족에게 나눠 배정 (가족별 수량)') : null,
       U.field('메모', note),
       productOf(it) ? h('p.hint', '제품: ' + productOf(it) + (it.owned ? ' · 보유 ' + it.owned + '개' : '')) : null,
       it && R.safeLink(it.link) ? h('a.small', { href: R.safeLink(it.link), target: '_blank', rel: 'noopener' }, '🛒 구매 링크 열기') : null,
@@ -1204,44 +1194,57 @@
       return x.deleted !== 'Y' && x.name === l.name && (x.itemId || '') === (l.itemId || '') && R.isTogether(x);
     });
   }
-  function shareSplitSheet(t, l) {
-    var parties = partyList(t), comps = R.parseCompanions(t.companions), group = splitGroup(l);
-    var rows = parties.map(function (p) { return { name: p.name, label: p.icon + ' ' + p.label, cls: p.cls } })
-      .concat([{ name: '미정', label: '🤔 미정', cls: '' }]);
-    rows.forEach(function (r) {
-      r.line = group.filter(function (x) { return (x.party === '미정' ? '미정' : partyOf(x)) === r.name; })[0] || null;
-      r.qty = r.line ? R.num(r.line.qty, 1) : 0;
+  /** 공용 준비물 배정: 가족을 고르고(여러 가족 가능) 가족별 수량 지정 — 기본 1개, 아무도 안 고르면 미정 */
+  function famAssignSheet(t, l) {
+    var parties = partyList(t), group = splitGroup(l);
+    if (!group.length) group = [l];
+    var rows = parties.map(function (p) {
+      var line = group.filter(function (x) { return x.party !== '미정' && partyOf(x) === p.name; })[0] || null;
+      return { p: p, line: line, on: !!line, qty: line ? R.num(line.qty, 1) : 1 };
     });
-    var box = h('div'), sum = h('b');
+    var box = h('div'), sum = h('small.hint');
     function draw() {
       box.innerHTML = '';
       rows.forEach(function (r) {
-        box.appendChild(h('div.kv.splitrow' + r.cls, h('span.pname', r.label), U.stepper(r.qty, function (v) { r.qty = v; draw(); }, 0)));
+        box.appendChild(h('div.arow' + (r.on ? '.on' : '') + r.p.cls,
+          h('button.apick', { type: 'button', 'aria-pressed': r.on ? 'true' : 'false', onclick: function () { r.on = !r.on; draw(); } },
+            h('span.ck', r.on ? '✓' : ''), r.p.icon + ' ' + r.p.label),
+          r.on ? U.stepper(r.qty, function (v) { r.qty = v; draw(); }, 1) : null));
       });
-      var tot = rows.reduce(function (a, r) { return a + r.qty; }, 0), n = rows.filter(function (r) { return r.qty > 0; }).length;
-      sum.textContent = '합계 ' + tot + '개 · ' + n + '가족';
+      var on = rows.filter(function (r) { return r.on; });
+      sum.textContent = !on.length ? '아무 가족도 고르지 않으면 🤔 미정으로 둬요' :
+        on.length === 1 ? on[0].p.label + ' ' + on[0].qty + '개' :
+        '👥 ' + on.length + '가족 나눔 · 합계 ' + on.reduce(function (a, r) { return a + r.qty; }, 0) + '개';
     }
     draw();
-    var close = U.sheet('👥 ' + l.name + ' 나눠 가져오기', [
-      h('p.hint', '가족마다 가져올 개수를 정하세요. 가족별로 따로 체크돼요. 0개면 그 가족 몫은 빠져요.'),
-      box, h('div.kv', h('span'), sum)], [
-      h('button.btn.primary.wide', { onclick: function () {
-        if (!rows.some(function (r) { return r.qty > 0; })) { U.toast('한 가족 이상 1개 이상 정해 주세요'); return; }
-        var ops = [], used = {};
-        rows.forEach(function (r) { if (r.line) used[r.line.id] = 1; });
-        rows.forEach(function (r) {
-          if (r.qty > 0 && r.line) ops.push({ t: 'lines', id: r.line.id, set: { qty: String(r.qty), shared: 'Y' } });
-          else if (r.qty > 0) {
-            ops.push({ t: 'lines', id: S.uid('L'), set: lineSet(t.id, { kind: l.kind, itemId: l.itemId, name: l.name, category: l.category, qty: r.qty, note: l.note,
-              source: l.source || '수동', shared: 'Y', party: r.name }) });
-          } else if (r.line) ops.push({ t: 'lines', id: r.line.id, set: { deleted: 'Y' } });
-        });
-        // 같은 가족 중복 줄은 정리
-        group.forEach(function (x) { if (!used[x.id]) ops.push({ t: 'lines', id: x.id, set: { deleted: 'Y' } }); });
-        S.mutate(ops); close();
-        var parts = rows.filter(function (r) { return r.qty > 0; });
-        U.toast(l.name + ' → ' + parts.map(function (r) { return plabel(parties, r.name) + ' ' + r.qty; }).join(', '));
-      } }, '저장')]);
+    function save() {
+      var on = rows.filter(function (r) { return r.on; }), ops = [], used = {};
+      on.forEach(function (r) { if (r.line) used[r.line.id] = 1; });
+      var spare = group.filter(function (x) { return !used[x.id]; });
+      on.forEach(function (r) {
+        if (r.line) { ops.push({ t: 'lines', id: r.line.id, set: { qty: String(r.qty), shared: 'Y', party: r.p.name } }); return; }
+        var reuse = spare.shift();
+        // 다른 가족(또는 미정)의 줄을 넘겨받으면 체크는 해제 — 새 가족이 챙긴 게 아니므로
+        if (reuse) ops.push({ t: 'lines', id: reuse.id, set: { qty: String(r.qty), shared: 'Y', party: r.p.name, pack: '', done: '' } });
+        else ops.push({ t: 'lines', id: S.uid('L'), set: lineSet(t.id, { kind: l.kind, itemId: l.itemId, name: l.name, category: l.category, qty: r.qty, note: l.note,
+          source: l.source || '수동', shared: 'Y', party: r.p.name }) });
+      });
+      if (!on.length) {
+        var keep = spare.shift();
+        ops.push({ t: 'lines', id: keep.id, set: { shared: 'Y', party: '미정', pack: '', done: '' } });
+      }
+      spare.forEach(function (x) { ops.push({ t: 'lines', id: x.id, set: { deleted: 'Y' } }); });
+      S.mutate(ops); close();
+      U.toast(l.name + ' → ' + (on.length ? on.map(function (r) { return r.p.label + ' ' + r.qty; }).join(', ') : '미정'));
+    }
+    var close = U.sheet(l.name + ' — 어느 가족이?', [
+      h('p.hint', '가족을 누르면 1개로 배정돼요. 수량은 −/+로 바꾸세요. 여러 가족을 고르면 나눠 가져와요.'),
+      box, sum,
+      h('div.menu',
+        h('button', { onclick: function () { close(); editLine(l); } }, '✏️ 이름·카테고리·메모 수정'),
+        h('button', { onclick: function () { close(); setTogether(group, false); if (group.length > 1) removeLines(group.slice(1)); } }, '🏠 우리 전용으로 옮기기'),
+        h('button.danger', { onclick: function () { close(); removeLines(group); } }, '🗑️ 이번 캠핑에서 빼기'))
+    ], [h('button.btn.primary.wide', { onclick: save }, '저장')]);
   }
 
   function selectEl(opts, value, onChange, labels) {
