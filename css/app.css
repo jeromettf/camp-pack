@@ -276,3 +276,10 @@ label.toggle input, label.inline input { width: 20px; height: 20px; accent-color
 .boxitem { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .boxitem > div { display: flex; flex-direction: column; min-width: 0; }
 .boxitem select { width: auto; min-height: 36px; font-size: 14px; padding: 4px 8px; }
+
+/* v1.3: 가족별 링크 · 동행 현황 · 동행 가족 화면 */
+.famlink { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.famlink > div { flex: 1; display: flex; flex-direction: column; }
+.compsum summary small { font-weight: 400; color: var(--muted); }
+.guesthead h2 { font-size: 18px; }
+.guesthead .bar { height: 10px; }

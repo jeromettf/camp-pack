@@ -240,11 +240,24 @@ function setPin_(family, pin, currentPin) {
 
 /* ───────────────────────── 같이 챙기기 (동행 가족 공유) ───────────────────────── */
 
+function parseComps_(t) {
+  try { var a = JSON.parse(t.companions || '[]'); return Array.isArray(a) ? a.filter(function (c) { return c && c.name; }) : []; }
+  catch (e) { return []; }
+}
+/** 공유 코드 → 캠핑 (+ 가족별 전용 링크면 그 가족 이름). 예전 캠핑 공용 링크도 계속 지원 */
 function shareTrip_(token) {
   if (!token || String(token).length < 16) return null;
-  var t = readTable_('trips').filter(function (x) { return x.shareToken && x.shareToken === String(token); })[0];
+  token = String(token);
+  var t = null, fam = '';
+  readTable_('trips').some(function (x) {
+    if (x.shareToken && x.shareToken === token) { t = x; return true; }
+    var c = parseComps_(x).filter(function (c) { return c.token && c.token === token; })[0];
+    if (c) { t = x; fam = c.name; return true; }
+    return false;
+  });
   if (!t || t.status === '보관') return null;
   if (t.shareUntil && today_() > t.shareUntil) return null;
+  t._fam = fam;
   return t;
 }
 function isShared_(l) { return l.deleted !== 'Y' && (l.shared === 'Y' || l.kind === '장보기' || l.kind === '정산' || (l.party && l.party !== '우리')); }
@@ -259,8 +272,9 @@ function shareGet_(token) {
   var lines = readTable_('lines').filter(function (l) { return l.tripId === t.id && isShared_(l); }).map(function (l) {
     var o = {}; SHARE_FIELDS.forEach(function (f) { o[f] = l[f]; }); return o;
   });
-  return { ok: true, version: version_(), ourName: props_().getProperty('FAMILY_NAME') || '우리 가족', ourPeople: people,
-    trip: { title: t.title, start: t.start, end: t.end, place: place ? place.name : '', companions: t.companions, splitRule: t.splitRule },
+  var comps = parseComps_(t).map(function (c) { return { name: c.name, adults: c.adults, kids: c.kids }; }); // 다른 가족 링크 코드는 숨김
+  return { ok: true, version: version_(), ourName: props_().getProperty('FAMILY_NAME') || '우리 가족', ourPeople: people, fam: t._fam,
+    trip: { title: t.title, start: t.start, end: t.end, place: place ? place.name : '', companions: JSON.stringify(comps), splitRule: t.splitRule },
     lines: lines };
 }
 
@@ -268,8 +282,8 @@ function shareGet_(token) {
 function shareMutate_(token, by, ops) {
   var t = shareTrip_(token);
   if (!t) return { ok: false, code: 'share_invalid', error: '공유가 끝났거나 잘못된 링크예요' };
-  var comps = [];
-  try { comps = JSON.parse(t.companions || '[]').map(function (c) { return c.name; }); } catch (e) {}
+  if (t._fam) by = t._fam; // 가족별 전용 링크: 그 가족으로 고정
+  var comps = parseComps_(t).map(function (c) { return c.name; });
   if (comps.indexOf(by) < 0) return { ok: false, code: 'bad_request', error: '동행 가족 이름을 선택하세요' };
   var lines = {};
   readTable_('lines').forEach(function (l) { if (l.tripId === t.id) lines[l.id] = l; });
