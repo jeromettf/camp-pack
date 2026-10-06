@@ -67,6 +67,10 @@
     var p = String(v).split('|'), t = (p[1] || '').slice(11);
     return p[0] + (t ? ' ' + t : '');
   }
+  function sameName(n) {
+    var key = String(n).replace(/\s/g, '').toLowerCase();
+    return D().members.filter(function (m) { return String(m.name).replace(/\s/g, '').toLowerCase() === key; })[0];
+  }
   function lintProblems() { return R.lint(D().items, D().boxes, allTags(), categories()); }
   function go(hash) { location.hash = hash; }
   function placeOf(t) { return t && t.placeId ? byId('places', t.placeId) : null; }
@@ -229,6 +233,18 @@
     return h('div.page.narrow',
       h('div.hero', h('div.logo', '🏕️'), h('h1', '우리 가족 캠핑 준비'),
         h('p', S.status.authError ? '가족 코드가 바뀌었어요. 새 초대 링크로 다시 열어주세요.' : '가족에게 받은 초대 링크를 열면 자동으로 연결돼요.')),
+      h('div.card', h('h3', '초대 링크 붙여넣기'),
+        h('small.hint', '아이폰에서 홈 화면에 추가한 앱은 사파리와 저장 공간이 따로라, 처음 한 번 초대 링크를 여기에 붙여넣어야 해요.'),
+        (function () {
+          var inv = h('input', { type: 'url', placeholder: 'https://jeromettf.github.io/camp-pack/#api=…' });
+          var e2 = h('p.err');
+          return h('div', inv, e2, h('button.btn.primary.wide', { onclick: function () {
+            var v = inv.value.trim(), i = v.indexOf('#');
+            var q = new URLSearchParams(i >= 0 ? v.slice(i + 1) : '');
+            if (!q.get('api') || !q.get('k')) { e2.textContent = '초대 링크 전체를 붙여넣어 주세요'; return; }
+            acceptInvite('#api=' + encodeURIComponent(q.get('api')) + '&k=' + q.get('k'));
+          } }, '연결'));
+        })()),
       h('details.card', h('summary', '직접 입력하기'),
         U.field('웹 앱 주소', api), U.field('가족 코드', k), err,
         h('button.btn.primary.wide', {
@@ -268,10 +284,16 @@
           h('span', TYPE_ICON[m.type] || '🧑'), m.name);
       })) : null,
       h('div.card', h('h3', people.length ? '목록에 없어요 — 새로 등록' : '처음이시네요! 이름을 등록하세요'),
+        people.length ? h('small.hint', '이미 등록된 이름을 입력하면 새로 만들지 않고 그 이름으로 들어가요.') : null,
         name, typeSeg,
         h('button.btn.primary.wide', {
           onclick: function () {
             var n = name.value.trim(); if (!n) { name.focus(); return; }
+            var same = sameName(n);
+            if (same) {
+              if (!R.active(same)) S.mutate([{ t: 'members', id: same.id, set: { active: 'Y' } }]);
+              S.setCfg({ me: same.id, meName: same.name }); U.toast(same.name + '님으로 들어왔어요'); go('#/'); rerender(); return;
+            }
             var id = S.uid('M');
             S.setCfg({ me: id, meName: n });
             S.mutate([{ t: 'members', id: id, set: { name: n, type: type, active: 'Y' } }]);
@@ -1311,7 +1333,16 @@
         m ? h('button.btn', { onclick: function () { S.mutate([{ t: 'members', id: m.id, set: { active: R.active(m) ? 'N' : 'Y' } }]); close(); rerender(); } }, R.active(m) ? '숨기기' : '다시 표시') : null,
         h('button.btn.primary', { onclick: function () {
           var n = name.value.trim(); if (!n) { name.focus(); return; }
-          S.mutate([{ t: 'members', id: m ? m.id : S.uid('M'), set: { name: n, type: type, email: email.value.trim(), active: m ? m.active || 'Y' : 'Y' } }]);
+          var dup = sameName(n);
+          if (dup && (!m || dup.id !== m.id)) { U.toast('"' + dup.name + '" 이름이 이미 있어요'); return; }
+          var ops = [{ t: 'members', id: m ? m.id : S.uid('M'), set: { name: n, type: type, email: email.value.trim(), active: m ? m.active || 'Y' : 'Y' } }];
+          if (m && m.name !== n) {
+            // 담당자는 이름으로 저장되므로 함께 변경 (지난 체크 기록의 이름은 당시 기록으로 남김)
+            D().items.forEach(function (i) { if (i.owner === m.name) ops.push({ t: 'items', id: i.id, set: { owner: n } }); });
+            D().lines.forEach(function (l) { if (l.owner === m.name) ops.push({ t: 'lines', id: l.id, set: { owner: n } }); });
+            if (S.cfg.me === m.id) S.setCfg({ meName: n });
+          }
+          S.mutate(ops);
           close(); rerender();
         } }, '저장')]);
     }
