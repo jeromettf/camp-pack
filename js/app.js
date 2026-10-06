@@ -1887,9 +1887,12 @@
     return R.parseCompanions(G.data.trip.companions).some(function (c) { return c.name === f; }) ? f : '';
   }
   function guestLoad(token) {
+    var startSeq = G.seq || 0;
     return S.publicPost({ op: 'shareGet', s: token }).then(function (j) {
       if (G.token !== token) return;
       G.offline = false;
+      // 요청 후에 체크·빼기 등 변경이 생겼으면 낡은 응답 → 버림 (전송 후 다시 불러옴)
+      if ((G.seq || 0) !== startSeq || G.queue.length || G.sending) return;
       if (!j.ok) { G.err = j.error; if (j.code === 'share_invalid') G.data = null; }
       else { G.err = ''; G.data = j; G.queue.forEach(guestApply); gSave(); }
       if (cur.name === 'guest') rerender();
@@ -1917,6 +1920,7 @@
   }
   function guestSend(ops) {
     ops.forEach(function (op) { guestApply(op); G.queue.push(op); });
+    G.seq = (G.seq || 0) + 1;
     gSave(); rerender(); guestFlush();
   }
   function guestFlush() {
@@ -1930,6 +1934,7 @@
       G.queue.splice(0, batch.length); gSave();
       if (!j.ok) U.toast(j.error);
       else if (j.rejected) U.toast('이미 다른 가족이 정한 항목이 있어서 새로 불러왔어요');
+      if (G.queue.length) return guestFlush(); // 전송 중 쌓인 변경 먼저
       guestLoad(token);
     }).catch(function () {
       G.sending = false; G.offline = true;

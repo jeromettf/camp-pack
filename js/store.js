@@ -53,6 +53,7 @@
     if (!ops.length) return;
     ops.forEach(apply);
     ops.forEach(function (op) { S.queue.push(op); });
+    seq++;
     save(LS.queue, S.queue); save(LS.data, S.data); save(LS.extra, S.extra);
     emit('local');
     S.flush();
@@ -81,6 +82,7 @@
   S.post = post;
 
   var flushing = null, retryTimer = null, retryDelay = 5000;
+  var seq = 0, needResync = false; // seq: 로컬 변경 횟수 — 이보다 먼저 출발한 동기화 응답은 낡은 데이터
   S.flush = function () {
     if (flushing || !S.queue.length || !S.connected()) return flushing || Promise.resolve();
     var batch = S.queue.slice(0, 300);
@@ -91,6 +93,7 @@
         S.status.error = ''; retryDelay = 5000;
         flushing = null;
         if (S.queue.length) return S.flush();
+        if (syncing) { needResync = true; return syncing; } // 진행 중 동기화는 변경 전 데이터 → 끝난 뒤 다시
         return S.sync(true);
       }, function (e) {
         flushing = null;
@@ -120,15 +123,21 @@
     if (!S.connected()) return Promise.resolve();
     if (syncing) return syncing;
     if (S.queue.length) return S.flush();
+    var startSeq = seq;
     syncing = post({ op: 'sync', since: force ? -1 : S.data.version })
       .then(function (j) {
         S.status.lastSync = Date.now(); S.status.error = '';
+        // 요청 후에 생긴 변경이 있으면 이 응답은 낡았음 → 버리고 다시 받기 (뺀 준비물이 되살아나는 문제 방지)
+        if (seq !== startSeq || S.queue.length || flushing) { needResync = true; return; }
         if (!j.same) { replaceData(j); emit('remote'); }
         else emit('status');
       }, function (e) {
         S.status.error = e.offline ? '' : e.message; emit('status');
       })
-      .then(function () { syncing = null; });
+      .then(function () {
+        syncing = null;
+        if (needResync && !S.queue.length && !flushing) { needResync = false; return S.sync(true); }
+      });
     return syncing;
   };
 
