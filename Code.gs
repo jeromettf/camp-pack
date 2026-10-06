@@ -100,6 +100,12 @@ function doPost(e) {
       case 'tripLines': return json_({ ok: true, lines: readTable_('lines').filter(function (l) { return l.tripId === req.tripId; }) });
       case 'history': return json_({ ok: true, rows: readTable_('history').slice(-300).reverse() });
       case 'setPin': return json_(setPin_(req.family, req.pin, req.currentPin));
+      case 'shareLink': {
+        var r = mutate_([{ t: 'trips', id: String(req.tripId || ''), set: {}, link: { name: String(req.name || ''), action: req.action === 'revoke' ? 'revoke' : 'issue' } }], String(req.by || '앱'));
+        var tok = r.links && r.links[String(req.name || '')];
+        if (tok === undefined) return json_({ ok: false, code: 'bad_request', error: '동행 가족을 찾을 수 없어요' });
+        return json_({ ok: true, token: tok, version: r.version });
+      }
       default: return json_({ ok: false, code: 'bad_request', error: '알 수 없는 요청: ' + req.op });
     }
   } catch (err) {
@@ -137,7 +143,7 @@ function mutate_(ops, by) {
   var lock = LockService.getScriptLock();
   lock.waitLock(25000);
   try {
-    var now = nowStr_(), logs = [], groups = {}, applied = 0;
+    var now = nowStr_(), logs = [], groups = {}, applied = 0, links = {};
     ops.forEach(function (op) {
       var s = SCHEMA[op && op.t];
       if (!s || s.readonly || !op.id || !op.set) return;
@@ -152,11 +158,13 @@ function mutate_(ops, by) {
       var dirty = {}, appended = [];
       groups[t].forEach(function (op) {
         var i = index[String(op.id)], row, isNew = i === undefined;
+        if (op.link && isNew) return; // 없는 캠핑에 링크 만들기 금지
         if (isNew) {
           row = []; for (var c = 0; c < hdr.width; c++) row.push('');
           row[hdr.col[keyField]] = String(op.id);
           data.push(row); i = data.length - 1; index[String(op.id)] = i; appended.push(i);
         } else row = data[i];
+        if (t === 'trips') prepareCompanions_(op, row, hdr, links);
         var changes = [];
         Object.keys(op.set).forEach(function (f) {
           if (f === keyField || hdr.col[f] === undefined) return;
@@ -183,10 +191,51 @@ function mutate_(ops, by) {
     });
     if (logs.length) appendHistory_(logs);
     var v = applied ? bumpVersion_() : version_();
-    return { ok: true, applied: applied, version: v };
+    return { ok: true, applied: applied, version: v, links: links };
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * 동행 가족 링크 코드 보호 (잠금 안에서 현재 시트 값 기준으로 처리)
+ * - 일반 수정(인원 등)으로 동행 칸을 통째로 덮어써도, 이미 있는 링크 코드는 유지
+ *   (다른 기기에서 아직 동기화 안 된 목록으로 저장해도 링크가 사라지지 않음)
+ * - 링크 만들기/끄기는 op.link = { name, action: 'issue' | 'revoke' } 로만
+ */
+function prepareCompanions_(op, row, hdr, links) {
+  if (hdr.col.companions === undefined) return;
+  var cur = parseComps_({ companions: cell_(row[hdr.col.companions]) });
+  var tokOf = {}; cur.forEach(function (c) { if (c.token) tokOf[c.name] = c.token; });
+  if (op.link) {
+    var name = String(op.link.name || ''), found = false;
+    cur.forEach(function (c) {
+      if (c.name !== name) return;
+      found = true;
+      if (op.link.action === 'revoke') c.token = '';
+      else if (!c.token) c.token = Utilities.getUuid().replace(/-/g, '');
+      links[name] = c.token || '';
+    });
+    if (!found) return;
+    op.set = op.set || {};
+    op.set.companions = JSON.stringify(cur);
+    if (op.link.action !== 'revoke' && hdr.col.end !== undefined) {
+      var until = addDays_(cell_(row[hdr.col.end]) || today_(), 7), had = cell_(row[hdr.col.shareUntil]);
+      if (!had || had < until) op.set.shareUntil = until;
+    }
+    return;
+  }
+  if (!op.set || !('companions' in op.set)) return;
+  var inc;
+  try { inc = JSON.parse(op.set.companions || '[]'); } catch (e) { return; }
+  if (!Array.isArray(inc)) return;
+  op.set.companions = JSON.stringify(inc.map(function (c) {
+    if (!c || !c.name) return c;
+    var o = {}; Object.keys(c).forEach(function (k) { o[k] = c[k]; });
+    if (tokOf[c.name]) o.token = tokOf[c.name]; // 서버에 있는 코드가 우선
+    else if (!o.token) delete o.token;
+    return o;
+  }));
 }
 
 function describe_(s, row, hdr, changes, isNew) {

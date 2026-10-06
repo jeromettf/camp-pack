@@ -1834,27 +1834,44 @@
   /** 동행 가족별 전용 링크: 보내기·끄기 */
   function linkCard(t, lines, parties) {
     var comps = R.parseCompanions(t.companions), until = R.addDays(t.end || t.start, 7);
-    function saveComps(next, extra) { S.mutate([{ t: 'trips', id: t.id, set: Object.assign({ companions: JSON.stringify(next) }, extra || {}) }]); }
-    function send(c) {
-      var tok = c.token;
-      if (!tok) {
-        tok = randToken();
-        saveComps(comps.map(function (x) { return x.name === c.name ? Object.assign({}, x, { token: tok }) : x; }), { shareUntil: until });
-      } else if (t.shareUntil !== until) S.mutate([{ t: 'trips', id: t.id, set: { shareUntil: until } }]);
-      shareOut('🏕️ ' + t.title + ' — ' + c.name + ' 전용', location.origin + location.pathname + '#/s/' + tok,
+    function linkUrl(tok) { return location.origin + location.pathname + '#/s/' + tok; }
+    function shareLink(c, tok) {
+      shareOut('🏕️ ' + t.title + ' — ' + c.name + ' 전용', linkUrl(tok),
         '🏕️ ' + t.title + ' (' + U.range(t.start, t.end) + ')\n' + c.name + ' 전용 링크예요. 맡은 준비물을 확인하고 챙기면 체크해 주세요!');
+    }
+    // 링크 만들기·끄기는 서버가 처리 (두 기기에서 관리해도 같은 링크, 서로 덮어쓰지 않음)
+    function linkReq(c, action, btn) {
+      if (!navigator.onLine || !S.connected()) { U.toast('인터넷에 연결되면 할 수 있어요'); return null; }
+      if (btn) { btn.disabled = true; btn.textContent = action === 'revoke' ? '끄는 중…' : '만드는 중…'; }
+      return S.post({ op: 'shareLink', tripId: t.id, name: c.name, action: action, by: S.cfg.meName || '앱' })
+        .then(function (j) { return S.sync(true).then(function () { return j; }); })
+        .catch(function (e) { U.toast(e.message || '실패했어요. 다시 시도해 주세요'); if (btn) { btn.disabled = false; btn.textContent = '다시 시도'; } return null; });
+    }
+    function make(c, btn) {
+      var p = linkReq(c, 'issue', btn);
+      if (p) p.then(function (j) {
+        if (!j) return;
+        U.closeSheets();
+        // 공유 창은 사용자가 다시 눌러야 열리므로(브라우저 정책) 준비 완료 화면에서 보내기
+        U.sheet(famIcon(comps, c.name) + ' ' + c.name + ' 링크가 준비됐어요', [
+          h('p.hint', '두 분 중 누가 보내도 같은 링크예요. ' + U.md(until) + '까지 열려요.'),
+          h('input', { type: 'text', readonly: true, value: linkUrl(j.token), onclick: function (e) { e.target.select(); } }),
+        ], [h('button.btn.primary.wide', { onclick: function () { shareLink(c, j.token); } }, '📤 보내기 (카톡 등)')]);
+      });
     }
     return h('div.card', h('h3', '🔗 동행 가족별 전용 링크'),
       h('p.hint', '가족마다 다른 링크예요. 열면 로그인 없이 그 가족으로 바로 들어가서, 그 가족이 맡은 것·공용 짐·정산만 봐요. ' + U.md(until) + '에 자동으로 닫혀요.'),
       comps.map(function (c) {
+        var mk = h('button.btn.small.primary', { onclick: function () { if (c.token) shareLink(c, c.token); else make(c, mk); } }, c.token ? '📤 보내기' : '🔗 링크 만들기');
+        var off = c.token ? h('button.btn.small', { onclick: function () {
+          U.ask(c.name + ' 링크 끄기', '이 가족의 링크는 더 이상 열리지 않아요. 다시 만들면 새 링크가 생겨요.', '끄기', function () {
+            var p = linkReq(c, 'revoke', off);
+            if (p) p.then(function (j) { if (j) { U.closeSheets(); U.toast(c.name + ' 링크를 껐어요'); } });
+          }, true);
+        } }, '끄기') : null;
         return h('div.famlink',
-          h('div', h('b', famIcon(comps, c.name) + ' ' + c.name), h('small', c.token ? '링크 보냄' : '아직 안 보냄')),
-          h('button.btn.small.primary', { onclick: function () { send(c); } }, c.token ? '다시 보내기' : '📤 보내기'),
-          c.token ? h('button.btn.small', { onclick: function () {
-            U.ask(c.name + ' 링크 끄기', '이 가족의 링크는 더 이상 열리지 않아요. 다시 보내면 새 링크가 만들어져요.', '끄기', function () {
-              saveComps(comps.map(function (x) { return x.name === c.name ? Object.assign({}, x, { token: '' }) : x; }));
-            }, true);
-          } }, '끄기') : null);
+          h('div', h('b', famIcon(comps, c.name) + ' ' + c.name), h('small', c.token ? '링크 있음 · 다시 보내도 같은 링크' : '아직 링크 없음')),
+          mk, off);
       }),
       t.shareToken ? h('button.btn.small', { onclick: function () { S.mutate([{ t: 'trips', id: t.id, set: { shareToken: '' } }]); U.toast('예전 공용 링크를 껐어요'); } }, '예전 공용 링크 끄기') : null,
       h('button.btn.wide', { onclick: function () { shareOut(t.title, null, shareText(t.title, U.range(t.start, t.end), lines, parties, t.splitRule || '인원')); } }, '📋 카톡용 정리 복사'));
