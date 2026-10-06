@@ -29,6 +29,11 @@
     S.cfg = {}; S.data = emptyData(); S.queue = []; S.extra = {};
   };
 
+  /** 재로그인 후 못 보낸 변경 되살리기 */
+  S.restoreQueue = function (q) {
+    S.queue = q.slice(); q.forEach(apply); save(LS.queue, S.queue); save(LS.data, S.data);
+  };
+
   function keyOf(t) { return t === 'settings' ? 'key' : 'id'; }
 
   /** op 하나를 로컬 데이터에 반영 */
@@ -72,7 +77,9 @@
         }
         S.status.online = true; S.status.authError = false;
         return j;
-      }, function (e) {
+      })
+      // 서버가 보낸 오류(로그인 만료 등)도 여기서 받도록 catch 로 (예전엔 네트워크 오류만 받아 로그인 화면이 안 떴음)
+      .catch(function (e) {
         if (timer) clearTimeout(timer);
         if (!e.code) { S.status.online = false; e.offline = true; }
         if (e.code === 'auth') S.status.authError = true;

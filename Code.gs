@@ -62,7 +62,7 @@ var DEFAULT_SETTINGS = [
   ['태그_기간', '1박, 연박', '기간 태그 (날짜로 자동 결정)'],
   ['태그_사용자', '', '직접 만든 태그 (쉼표로 구분)'],
   ['카테고리', '할 일, 음식·음료, 조리·식기, 텐트·설치, 침구, 가구, 불·난방, 조명·전기, 위생·세면, 옷·신발, 아이·반려견, 안전·기타', '준비물 카테고리 (표시 순서)'],
-  ['이메일알림', 'Y', 'D-2 준비 알림·D+1 회고 요청 메일 (Y/N)'],
+  ['이메일알림', 'Y', 'D-2 준비 알림 메일 (Y/N)'],
   ['안씀보관기준', '3', '연속으로 안 쓴 횟수가 이 값 이상이면 보관 제안'],
 ];
 var PROTECTED = ['trips', 'lines', 'reviews', 'history'];
@@ -139,9 +139,9 @@ function bootstrap_() {
  * ops: [{t: 'lines', id: 'L-..', set: {pack: '아빠|2026-10-24 09:12'}}, ...]
  * id 로 행을 찾아 지정한 칸만 갱신(없으면 추가). 행 번호에 의존하지 않으므로 시트 정렬·삽입에 안전.
  */
-function mutate_(ops, by) {
-  var lock = LockService.getScriptLock();
-  lock.waitLock(25000);
+function mutate_(ops, by, lockHeld) {
+  var lock = lockHeld ? null : LockService.getScriptLock();
+  if (lock) lock.waitLock(25000);
   try {
     var now = nowStr_(), logs = [], groups = {}, applied = 0, links = {};
     ops.forEach(function (op) {
@@ -193,7 +193,7 @@ function mutate_(ops, by) {
     var v = applied ? bumpVersion_() : version_();
     return { ok: true, applied: applied, version: v, links: links };
   } finally {
-    lock.releaseLock();
+    if (lock) lock.releaseLock();
   }
 }
 
@@ -232,8 +232,8 @@ function prepareCompanions_(op, row, hdr, links) {
   op.set.companions = JSON.stringify(inc.map(function (c) {
     if (!c || !c.name) return c;
     var o = {}; Object.keys(c).forEach(function (k) { o[k] = c[k]; });
-    if (tokOf[c.name]) o.token = tokOf[c.name]; // 서버에 있는 코드가 우선
-    else if (!o.token) delete o.token;
+    // 링크 코드는 shareLink 로만 생기고 꺼짐 → 앱이 보낸 값은 무시 (꺼진 링크 부활·다른 캠핑 코드 복사 방지)
+    if (tokOf[c.name]) o.token = tokOf[c.name]; else delete o.token;
     return o;
   }));
 }
@@ -333,18 +333,25 @@ function shareGet_(token) {
 }
 
 /** 동행 가족 변경: 허용된 필드만, 담당이 '미정'일 때만 가져가기 */
+/** 검사와 쓰기를 한 잠금 안에서 (두 가족이 동시에 "우리가 가져갈게" 눌러도 한 가족만) */
 function shareMutate_(token, by, ops) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try { return shareMutateLocked_(token, by, ops); } finally { lock.releaseLock(); }
+}
+function shareMutateLocked_(token, by, ops) {
   var t = shareTrip_(token);
   if (!t) return { ok: false, code: 'share_invalid', error: '공유가 끝났거나 잘못된 링크예요' };
   if (t._fam) by = t._fam; // 가족별 전용 링크: 그 가족으로 고정
   var comps = parseComps_(t).map(function (c) { return c.name; });
   if (comps.indexOf(by) < 0) return { ok: false, code: 'bad_request', error: '동행 가족 이름을 선택하세요' };
-  var lines = {};
-  readTable_('lines').forEach(function (l) { if (l.tripId === t.id) lines[l.id] = l; });
+  var lines = {}, anyId = {};
+  readTable_('lines').forEach(function (l) { anyId[l.id] = 1; if (l.tripId === t.id) lines[l.id] = l; });
   var safe = [], rejected = 0;
   (ops || []).slice(0, 100).forEach(function (op) {
     if (!op || op.t !== 'lines' || !op.id || !op.set) { rejected++; return; }
     var cur = lines[op.id], set = {};
+    if (!cur && anyId[op.id]) { rejected++; return; } // 다른 캠핑의 줄 id 로 새 항목을 만들어 덮어쓰기 방지
     if (!cur) {
       var kind = ['물건', '장보기', '정산'].indexOf(op.set.kind) >= 0 ? op.set.kind : '물건';
       var name = String(op.set.name || '').trim().slice(0, 60);
@@ -385,7 +392,7 @@ function shareMutate_(token, by, ops) {
     }
     if (Object.keys(set).length) safe.push({ t: 'lines', id: op.id, set: set });
   });
-  var r = safe.length ? mutate_(safe, by + '(동행)') : { ok: true, applied: 0, version: version_() };
+  var r = safe.length ? mutate_(safe, by + '(동행)', true) : { ok: true, applied: 0, version: version_() };
   r.rejected = rejected;
   return r;
 }

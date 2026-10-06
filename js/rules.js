@@ -221,15 +221,20 @@
    * 체크 상태는 건드리지 않고 추가·수량변경·제거 제안만 만든다.
    */
   function diffLines(existing, fresh) {
-    var ex = {}, fr = {};
-    existing.forEach(function (l) { var k = lineKey(l); if (k) ex[k] = l; });
+    var ex = {}, fr = {}, nLive = {};
+    existing.forEach(function (l) {
+      var k = lineKey(l); if (!k) return;
+      if (l.deleted !== 'Y') nLive[k] = (nLive[k] || 0) + 1;
+      if (!ex[k] || ex[k].deleted === 'Y') ex[k] = l; // 살아 있는 줄 우선
+    });
     fresh.forEach(function (l) { var k = lineKey(l); if (k) fr[k] = l; });
     var add = [], qty = [], remove = [];
     fresh.forEach(function (l) {
       var k = lineKey(l); if (!k) return;
       var e = ex[k];
       if (!e) add.push(l);
-      else if (e.deleted !== 'Y' && l.kind !== '수납함' && RULE_SOURCES[e.source] && num(e.qty, 1) !== l.qty)
+      // 여러 가족이 나눠 가져오는 준비물(같은 항목 줄이 여럿)은 수량 비교 제외
+      else if (e.deleted !== 'Y' && l.kind !== '수납함' && RULE_SOURCES[e.source] && (nLive[k] || 0) < 2 && num(e.qty, 1) !== l.qty)
         qty.push({ line: e, from: num(e.qty, 1), to: l.qty });
     });
     existing.forEach(function (l) {
