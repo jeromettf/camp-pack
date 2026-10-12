@@ -358,7 +358,11 @@
    * 정산. parties: [{name, people}] (첫 번째가 우리). rule: '가족' | '인원'
    * 결제자 이름은 '우리' 또는 동행 가족 이름. 10원 단위 반올림.
    */
-  function settle(lines, parties, rule) {
+  /**
+   * 정산. rule: '인원'(인원 비례) | '가족'(가족 수로 똑같이)
+   * via: 'hub'(호스트=parties[0] 가 모아서 정산) | 'direct'(가족끼리 최소 송금)
+   */
+  function settle(lines, parties, rule, via) {
     var names = parties.map(function (p) { return p.name; });
     var paid = {}, total = 0, items = [];
     names.forEach(function (n) { paid[n] = 0; });
@@ -379,6 +383,14 @@
     if (diff && names.length) {
       var top = names.slice().sort(function (a, b) { return paid[b] - paid[a]; })[0];
       share[top] += diff; bal[top] -= diff;
+    }
+    if (via === 'hub' && names.length) {
+      var host = names[0], hub = [];
+      names.slice(1).forEach(function (n) {
+        if (bal[n] < 0) hub.push({ from: n, to: host, amount: -bal[n] });
+        else if (bal[n] > 0) hub.push({ from: host, to: n, amount: bal[n] });
+      });
+      return { total: total, paid: paid, share: share, balance: bal, transfers: hub, items: items };
     }
     var cred = names.filter(function (n) { return bal[n] > 0; }).map(function (n) { return { n: n, v: bal[n] }; });
     var debt = names.filter(function (n) { return bal[n] < 0; }).map(function (n) { return { n: n, v: -bal[n] }; });

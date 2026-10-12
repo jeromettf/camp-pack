@@ -327,8 +327,8 @@ details.more > summary small, .checks summary small { font-weight: 400; color: v
 .chip.private { background: none; border: 1px dashed var(--line); }
 
 /* v2: 배정 · 현황 · 체크리스트 */
-.ttabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--chip); padding: 4px; border-radius: 14px; margin-bottom: 12px; }
-.ttabs button { position: relative; border: 0; background: none; padding: 10px 0; border-radius: 10px; font: inherit; font-weight: 700; font-size: 15px; color: var(--muted); cursor: pointer; }
+.ttabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); grid-auto-flow: column; gap: 4px; background: var(--chip); padding: 4px; border-radius: 14px; margin-bottom: 12px; }
+.ttabs button { position: relative; border: 0; background: none; padding: 10px 0; border-radius: 10px; font: inherit; font-weight: 700; font-size: 14px; white-space: nowrap; color: var(--muted); cursor: pointer; }
 .ttabs button.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
 .ttabs .dot { margin-left: 4px; font-size: 11px; background: var(--warn); color: #fff; border-radius: 99px; padding: 1px 6px; vertical-align: 2px; }
 .stepseg { display: flex; gap: 6px; margin: 0 0 10px; }
@@ -392,3 +392,25 @@ b.warn, .mini .warn { color: var(--warn); }
 .arow.on .apick .ck { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .arow.on[class*="fc"] .apick { color: var(--fc); }
 .arow.on[class*="fc"] .apick .ck { background: var(--fc); border-color: var(--fc); color: #fff; }
+
+/* 정산 보드 */
+.settotal { text-align: center; }
+.settotal .big { font-size: 30px; font-weight: 700; margin: 2px 0 4px; }
+.settotal small { display: block; color: var(--muted); }
+.settotal .missing { margin: 8px 0 0; color: var(--warn); font-size: 14px; }
+.settotal .mine { margin: 10px 0 0; padding: 10px; border-radius: 10px; background: var(--accent-soft); font-weight: 600; }
+.ftable-head, .frow { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 4px; align-items: center; font-size: 13px; }
+.frow > span:not(:first-child) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.settle2 .warnbox { border-color: var(--warn); background: var(--warn-soft); }
+.ftable-head { color: var(--muted); font-size: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.ftable-head span:not(:first-child), .frow > span:not(:first-child) { text-align: right; }
+.frow { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.frow[onclick], .frow { cursor: default; }
+.frow .fname { display: flex; flex-direction: column; font-weight: 600; min-width: 0; }
+.frow .fname small { font-weight: 400; color: var(--muted); font-size: 12px; }
+.frow[class*="fc"] .fname { color: var(--fc); }
+.frow.me { background: var(--accent-soft); border-radius: 8px; padding-left: 6px; padding-right: 6px; }
+b.plus { color: var(--accent); } b.minus { color: var(--danger); }
+.transfer.hl { background: var(--accent-soft); border-radius: 8px; padding: 6px 8px; }
+.costs .payer { margin: 8px 0 4px; }
+h2.sec { font-size: 18px; margin: 18px 4px 8px; }
