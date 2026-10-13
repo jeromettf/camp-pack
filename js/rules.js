@@ -472,21 +472,59 @@
         if (!sw) { who.forEach(function (n) { w[n] = 1; }); sw = who.length; }
         who.forEach(function (n) { per[n] = g.total * w[n] / sw; });
       }
+      // 정확한 값으로 더하고, 가족별 합계에서 한 번만 10원 단위로 반올림 (비용마다 반올림하면 오차가 쌓임)
       Object.keys(per).forEach(function (n) {
-        per[n] = Math.round(per[n] / 10) * 10;
         share[n] += per[n];
-        if (per[n]) breakdown[n].push({ name: g.name, amount: per[n], rule: g.rule, key: g.key });
+        var shown = Math.round(per[n] / 10) * 10;
+        if (shown) breakdown[n].push({ name: g.name, amount: shown, rule: g.rule, key: g.key });
       });
-      g.per = per;
+      g.exact = per;
+      g.per = {}; Object.keys(per).forEach(function (n) { g.per[n] = Math.round(per[n] / 10) * 10; });
     });
+    var exactShare = {};
+    names.forEach(function (n) { exactShare[n] = share[n]; share[n] = Math.round(share[n] / 10) * 10; });
     var bal = {};
     names.forEach(function (n) { bal[n] = paid[n] - share[n]; });
     // 반올림 차액은 가장 많이 낸 가족이 흡수
-    var diff = total - names.reduce(function (a, n) { return a + share[n]; }, 0);
+    var diff = total - names.reduce(function (a, n) { return a + share[n]; }, 0), top = '';
     if (diff && names.length) {
-      var top = names.slice().sort(function (a, b) { return paid[b] - paid[a]; })[0];
+      top = names.slice().sort(function (a, b) { return paid[b] - paid[a]; })[0];
       share[top] += diff; bal[top] -= diff;
     }
+    // 가족별 숙박(박 단위) / 그 외 — 반올림 차액은 그 외에 포함해 합계가 부담과 같게
+    var parts = {};
+    names.forEach(function (n) {
+      var st = 0, ot = 0;
+      groups.forEach(function (g) { var v = (g.exact && g.exact[n]) || 0; if (g.rule === '박') st += v; else ot += v; });
+      // 숙박은 반올림 값, 그 외는 나머지(합계 = 부담). 전체 반올림 차액은 흡수한 가족만 따로 표시
+      var adj = n === top ? diff : 0;
+      st = Math.round(st / 10) * 10;
+      parts[n] = { stay: st, other: share[n] - st - adj, adj: adj };
+    });
+    // 계산 근거: 같은 방법·같은 나눌 가족끼리 합쳐 "÷ 몇 가족 / 몇 명"
+    var bmap = {}, basis = [];
+    groups.forEach(function (g) {
+      if (!g.total) return;
+      var who = Object.keys(g.per || {}), k = g.rule + '|' + (g.with.length ? who.slice().sort().join(',') : '');
+      var b = bmap[k];
+      if (!b) { b = bmap[k] = { rule: g.rule, with: g.with.length ? who : [], total: 0, names: [] }; basis.push(b); }
+      b.total += g.total; b.names.push(g.name);
+    });
+    basis.forEach(function (b) {
+      var who = b.with.length ? b.with : names;
+      if (b.rule === '박') {
+        b.nights = [];
+        for (var k = 1; k <= N; k++) {
+          var stay = who.filter(function (n) { var ns = byName[n].nights; return !ns || !ns.length || ns.indexOf(k) >= 0; });
+          if (!stay.length) stay = who;
+          b.nights.push({ k: k, amount: b.total / N, families: stay.length, each: b.total / N / stay.length, missing: who.filter(function (n) { return stay.indexOf(n) < 0; }) });
+        }
+      } else if (b.rule === '인원') {
+        b.people = who.reduce(function (a, n) { return a + Math.max(0, num(byName[n].people, 0)); }, 0);
+        b.perPerson = b.people ? b.total / b.people : 0;
+      } else { b.families = who.length; b.perFamily = b.total / who.length; }
+    });
+    basis.sort(function (a, b) { return (a.rule === '박' ? 0 : 1) - (b.rule === '박' ? 0 : 1) || (a.with.length ? 1 : 0) - (b.with.length ? 1 : 0); });
     var transfers = [];
     if (o.via === 'hub') {
       names.slice(1).forEach(function (n) {
@@ -506,7 +544,8 @@
         if (!cred[j].v) j++;
       }
     }
-    return { total: total, paid: paid, share: share, balance: bal, transfers: transfers, groups: groups, breakdown: breakdown };
+    return { total: total, paid: paid, share: share, balance: bal, transfers: transfers, groups: groups, breakdown: breakdown,
+      parts: parts, basis: basis, rounding: { diff: diff, who: top } };
   }
   /** 가족이 묵은 밤 목록 (비어 있으면 전부) */
   function nightsOf(v, N) {

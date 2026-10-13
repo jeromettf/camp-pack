@@ -466,3 +466,36 @@ h2.sec { font-size: 18px; margin: 18px 4px 8px; }
 .part input[type=text] { flex: 1.3; min-width: 0; }
 .part input { min-width: 0; }
 b.minus, .minus { color: var(--danger); }
+
+/* 정산 결과: 계산 근거 · 가족별 결과 */
+:root { --stay: #7f77dd; }
+.basis .brule { border-left: 3px solid var(--accent); padding: 4px 0 6px 10px; margin: 8px 0; }
+.basis .brule.r-n { border-color: var(--stay); }
+.basis .brule small { display: block; color: var(--muted); }
+.basis .brule small b { color: var(--ink); }
+.pbar { height: 8px; margin: 6px 0 2px; }
+.pbar-in { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--accent); }
+.pbar-in i { display: block; height: 8px; }
+.pst, .legend .pst { background: var(--stay); }
+.pot { flex: 1; background: var(--accent); }
+.legend { display: block; color: var(--muted); margin: 2px 0 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; }
+.famres { border-bottom: 1px solid var(--line); padding: 8px 0; }
+.famres.me { background: var(--accent-soft); border-radius: 10px; padding: 8px; border-bottom: 0; margin: 4px 0; }
+.famhead { display: flex; width: 100%; justify-content: space-between; align-items: baseline; gap: 8px; border: 0; background: none; padding: 0; font: inherit; color: var(--ink); cursor: pointer; text-align: left; }
+.famhead .fname { font-weight: 600; }
+.famhead .fname small { font-weight: 400; color: var(--muted); }
+.famres[class*="fc"] .fname { color: var(--fc); }
+.famamt { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.famamt small { color: var(--muted); }
+.famdetail { margin-top: 6px; font-size: 14px; }
+.famdetail .kv { padding: 2px 0; }
+.famdetail .kv.sum { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px; }
+.famdetail .items summary { color: var(--muted); font-size: 13px; margin-top: 4px; cursor: pointer; }
+.myburden { text-align: center; border: 2px solid var(--accent); }
+.myburden .big { font-size: 28px; font-weight: 700; margin: 2px 0; }
+.myburden small { color: var(--muted); }
+.myburden .kv { text-align: left; }
+.famlist .seg { margin: 0; }
+.famlist .seg { flex: none; }
+.famlist .seg button { white-space: nowrap; padding: 4px 10px; font-size: 13px; }
