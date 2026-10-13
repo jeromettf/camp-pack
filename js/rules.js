@@ -475,31 +475,33 @@
       // 정확한 값으로 더하고, 가족별 합계에서 한 번만 10원 단위로 반올림 (비용마다 반올림하면 오차가 쌓임)
       Object.keys(per).forEach(function (n) {
         share[n] += per[n];
-        var shown = Math.round(per[n] / 10) * 10;
+        var shown = Math.round(per[n]);
         if (shown) breakdown[n].push({ name: g.name, amount: shown, rule: g.rule, key: g.key });
       });
       g.exact = per;
-      g.per = {}; Object.keys(per).forEach(function (n) { g.per[n] = Math.round(per[n] / 10) * 10; });
+      g.per = {}; Object.keys(per).forEach(function (n) { g.per[n] = Math.round(per[n]); });
     });
-    var exactShare = {};
-    names.forEach(function (n) { exactShare[n] = share[n]; share[n] = Math.round(share[n] / 10) * 10; });
+    // 1원 단위로 정확히: 정수 부분을 먼저 나누고, 1원 미만 끝전은 소수점이 큰 가족부터 1원씩 (합계 = 총액)
+    var exactShare = {}, frac = [], floorSum = 0;
+    names.forEach(function (n) {
+      exactShare[n] = share[n];
+      var f = Math.floor(share[n] + 1e-7);
+      frac.push({ n: n, r: share[n] - f, i: frac.length });
+      share[n] = f; floorSum += f;
+    });
+    var left = total - floorSum, plusOne = [];
+    frac.sort(function (a, b) { return b.r - a.r || a.i - b.i; });
+    for (var q = 0; q < left && q < frac.length; q++) { share[frac[q].n] += 1; plusOne.push(frac[q].n); }
     var bal = {};
     names.forEach(function (n) { bal[n] = paid[n] - share[n]; });
-    // 반올림 차액은 가장 많이 낸 가족이 흡수
-    var diff = total - names.reduce(function (a, n) { return a + share[n]; }, 0), top = '';
-    if (diff && names.length) {
-      top = names.slice().sort(function (a, b) { return paid[b] - paid[a]; })[0];
-      share[top] += diff; bal[top] -= diff;
-    }
     // 가족별 숙박(박 단위) / 그 외 — 반올림 차액은 그 외에 포함해 합계가 부담과 같게
     var parts = {};
     names.forEach(function (n) {
       var st = 0, ot = 0;
       groups.forEach(function (g) { var v = (g.exact && g.exact[n]) || 0; if (g.rule === '박') st += v; else ot += v; });
-      // 숙박은 반올림 값, 그 외는 나머지(합계 = 부담). 전체 반올림 차액은 흡수한 가족만 따로 표시
-      var adj = n === top ? diff : 0;
-      st = Math.round(st / 10) * 10;
-      parts[n] = { stay: st, other: share[n] - st - adj, adj: adj };
+      // 숙박은 1원 단위, 그 외는 나머지 (숙박 + 그 외 = 부담)
+      st = Math.round(st);
+      parts[n] = { stay: st, other: share[n] - st, adj: 0 };
     });
     // 계산 근거: 같은 방법·같은 나눌 가족끼리 합쳐 "÷ 몇 가족 / 몇 명"
     var bmap = {}, basis = [];
@@ -545,7 +547,7 @@
       }
     }
     return { total: total, paid: paid, share: share, balance: bal, transfers: transfers, groups: groups, breakdown: breakdown,
-      parts: parts, basis: basis, rounding: { diff: diff, who: top } };
+      parts: parts, basis: basis, rounding: { left: plusOne.length, who: plusOne } };
   }
   /** 가족이 묵은 밤 목록 (비어 있으면 전부) */
   function nightsOf(v, N) {

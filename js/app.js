@@ -1829,7 +1829,7 @@
     res.groups.filter(function (g) { return g.total; }).forEach(function (g) {
       out.push('· ' + g.name + ' ' + won(g.total) + ' (' + RL[g.rule] + (g.with.length ? ', ' + g.with.map(function (n) { return plabel(parties, n); }).join('·') + '만' : '') + ')');
     });
-    var r10 = function (v) { return Math.round(v / 10) * 10; };
+    var r10 = function (v) { return Math.round(v); };
     out.push('', '🧮 나눈 방법');
     res.basis.forEach(function (b) {
       var nm = b.names.length === 1 ? b.names[0] : b.names.length + '건';
@@ -1841,7 +1841,7 @@
     parties.forEach(function (p) {
       var n = R.num(p.people, 0), pt = res.parts[p.name] || { stay: 0, other: 0 };
       out.push(p.icon + ' ' + p.label + '(' + n + '명): ' + won(res.share[p.name]) + (n ? ' (1인 ' + won(r10(res.share[p.name] / n)) + ')' : '') +
-        (pt.stay ? ' = 숙박 ' + won(pt.stay) + ' + 그 외 ' + won(pt.other) + (pt.adj ? ' ' + (pt.adj > 0 ? '+' : '−') + ' 반올림 ' + won(Math.abs(pt.adj)) : '') : '') + ' · 낸 돈 ' + won(res.paid[p.name]));
+        (pt.stay ? ' = 숙박 ' + won(pt.stay) + ' + 그 외 ' + won(pt.other) : '') + ' · 낸 돈 ' + won(res.paid[p.name]));
     });
     out.push('', via === 'direct' ? '↔ 송금' : '🏠 ' + parties[0].label + josa(parties[0].label, '이', '가') + ' 모아서 정산');
     if (res.transfers.length) res.transfers.forEach(function (x) { out.push(plabel(parties, x.from) + ' → ' + plabel(parties, x.to) + ' ' + won(x.amount)); });
@@ -2014,8 +2014,8 @@
         multi && g.with.length ? h('small.muted', '나눠 내는 가족: ' + who) : null);
     }
     var groups = res.groups.slice().sort(function (a, b) { return (b.total ? 1 : 0) - (a.total ? 1 : 0); });
-    var r10 = function (v) { return Math.round(v / 10) * 10; };
-    var pp = function (v, n) { return n ? r10(v / n) : 0; };
+    var r10 = function (v) { return Math.round(v); }; // 1원 단위
+    var pp = function (v, n) { return n ? Math.round(v / n) : 0; };
     var maxShare = Math.max.apply(null, parties.map(function (p) { return res.share[p.name] || 0; }).concat([1]));
     /** 숙박/그 외 막대 */
     function partBar(p) {
@@ -2061,7 +2061,7 @@
             : [h('small', amt(b.total) + ' ÷ ' + b.families + '가족 = 가족당 ', h('b', amt(r10(b.perFamily))))];
           return h('div.brule.' + (b.rule === '박' ? 'r-n' : 'r-o'), h('div.kv', h('b', title), h('span', amt(b.total))), rows);
         }),
-        res.rounding.diff ? h('small.hint', '10원 단위 반올림 차이 ' + Math.abs(res.rounding.diff) + '원은 가장 많이 낸 ' + plabel(parties, res.rounding.who) + josa(plabel(parties, res.rounding.who), '이', '가') + ' 맞췄어요.') : null,
+        h('small.hint', '1원 단위까지 나눠요.' + (res.rounding.left ? ' 1원 미만 끝전 ' + res.rounding.left + '원은 소수점이 큰 가족(' + res.rounding.who.map(function (n) { return plabel(parties, n); }).join('·') + ')에 1원씩 더했어요.' : '')),
         h('small.hint', '전체 ' + allPeople + '명 · ' + parties.length + '가족 · ' + o.nights + '박'));
     }
     var meP = parties.filter(function (p) { return p.name === meName; })[0];
@@ -2269,7 +2269,7 @@
   function splitSheet(t, g) {
     var src = g.lines[0], parties = partyList(t), N = tripNights(t.start, t.end), total = g.total;
     var n0 = N > 1 ? N : 2, parts = [];
-    for (var i = 1; i <= n0; i++) parts.push({ name: g.name + (N > 1 ? ' ' + i + '박째' : ' ' + i), amt: amountInput(String(i < n0 ? Math.round(total / n0 / 10) * 10 : total - Math.round(total / n0 / 10) * 10 * (n0 - 1))), with: parties.map(function (p) { return p.name; }) });
+    for (var i = 1; i <= n0; i++) parts.push({ name: g.name + (N > 1 ? ' ' + i + '박째' : ' ' + i), amt: amountInput(String(i < n0 ? Math.floor(total / n0) : total - Math.floor(total / n0) * (n0 - 1))), with: parties.map(function (p) { return p.name; }) });
     var box = h('div'), sum = h('b');
     function draw() {
       box.innerHTML = '';
