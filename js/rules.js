@@ -356,7 +356,7 @@
 
   /**
    * 정산. parties: [{name, people}] (첫 번째가 우리). rule: '가족' | '인원'
-   * 결제자 이름은 '우리' 또는 동행 가족 이름. 10원 단위 반올림.
+   * (예전 방식 — 화면은 settleItems 사용) 결제자 이름은 '우리' 또는 동행 가족 이름. 10원 단위 반올림.
    */
   /**
    * 정산. rule: '인원'(인원 비례) | '가족'(가족 수로 똑같이)
@@ -472,7 +472,7 @@
         if (!sw) { who.forEach(function (n) { w[n] = 1; }); sw = who.length; }
         who.forEach(function (n) { per[n] = g.total * w[n] / sw; });
       }
-      // 정확한 값으로 더하고, 가족별 합계에서 한 번만 10원 단위로 반올림 (비용마다 반올림하면 오차가 쌓임)
+      // 정확한 값으로 더하고, 가족별 합계에서 한 번만 1원 단위로 정리 (비용마다 반올림하면 오차가 쌓임)
       Object.keys(per).forEach(function (n) {
         share[n] += per[n];
         var shown = Math.round(per[n]);
@@ -494,7 +494,7 @@
     for (var q = 0; q < left && q < frac.length; q++) { share[frac[q].n] += 1; plusOne.push(frac[q].n); }
     var bal = {};
     names.forEach(function (n) { bal[n] = paid[n] - share[n]; });
-    // 가족별 숙박(박 단위) / 그 외 — 반올림 차액은 그 외에 포함해 합계가 부담과 같게
+    // 가족별 숙박(박 단위) / 그 외 — 그 외 = 부담 − 숙박 (합계가 부담과 같게)
     var parts = {};
     names.forEach(function (n) {
       var st = 0, ot = 0;

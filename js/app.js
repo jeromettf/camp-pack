@@ -1833,14 +1833,15 @@
     out.push('', '🧮 나눈 방법');
     res.basis.forEach(function (b) {
       var nm = b.names.length === 1 ? b.names[0] : b.names.length + '건';
-      if (b.rule === '박') b.nights.forEach(function (nt) { out.push('· ' + nm + ' ' + nt.k + '박째 ' + won(nt.amount) + ' ÷ ' + nt.families + '가족 = ' + won(r10(nt.each))); });
-      else if (b.rule === '인원') out.push('· ' + nm + ' ' + won(b.total) + ' ÷ ' + b.people + '명 = 1인 ' + won(r10(b.perPerson)));
-      else out.push('· ' + nm + ' ' + won(b.total) + ' ÷ ' + b.families + '가족 = ' + won(r10(b.perFamily)));
+      var ex = function (v) { return (Math.round(v * 100) / 100).toLocaleString('ko-KR', { maximumFractionDigits: 2 }) + '원'; };
+      if (b.rule === '박') b.nights.forEach(function (nt) { out.push('· ' + nm + ' ' + nt.k + '박째 ' + ex(nt.amount) + ' ÷ ' + nt.families + '가족 = ' + ex(nt.each)); });
+      else if (b.rule === '인원') out.push('· ' + nm + ' ' + won(b.total) + ' ÷ ' + b.people + '명 = 1인 ' + ex(b.perPerson));
+      else out.push('· ' + nm + ' ' + won(b.total) + ' ÷ ' + b.families + '가족 = ' + ex(b.perFamily));
     });
     out.push('', '👨‍👩‍👧 가족별 최종 부담');
     parties.forEach(function (p) {
       var n = R.num(p.people, 0), pt = res.parts[p.name] || { stay: 0, other: 0 };
-      out.push(p.icon + ' ' + p.label + '(' + n + '명): ' + won(res.share[p.name]) + (n ? ' (1인 ' + won(r10(res.share[p.name] / n)) + ')' : '') +
+      out.push(p.icon + ' ' + p.label + '(' + n + '명): ' + won(res.share[p.name]) + (n ? ' (1인 약 ' + won(r10(res.share[p.name] / n)) + ')' : '') +
         (pt.stay ? ' = 숙박 ' + won(pt.stay) + ' + 그 외 ' + won(pt.other) : '') + ' · 낸 돈 ' + won(res.paid[p.name]));
     });
     out.push('', via === 'direct' ? '↔ 송금' : '🏠 ' + parties[0].label + josa(parties[0].label, '이', '가') + ' 모아서 정산');
@@ -2016,6 +2017,10 @@
     var groups = res.groups.slice().sort(function (a, b) { return (b.total ? 1 : 0) - (a.total ? 1 : 0); });
     var r10 = function (v) { return Math.round(v); }; // 1원 단위
     var pp = function (v, n) { return n ? Math.round(v / n) : 0; };
+    /** 나누어떨어지지 않으면 소수 둘째 자리까지 (계산 근거용) */
+    var ex = function (v) { var r = Math.round(v * 100) / 100; return r.toLocaleString('ko-KR', { maximumFractionDigits: 2 }); };
+    /** 1인당: 나누어떨어지면 그대로, 아니면 '약' */
+    var perTxt = function (v, n) { if (!n) return ''; var q = v / n; return '1인 ' + (Math.abs(q - Math.round(q)) < 0.005 ? '' : '약 ') + amt(Math.round(q)); };
     var maxShare = Math.max.apply(null, parties.map(function (p) { return res.share[p.name] || 0; }).concat([1]));
     /** 숙박/그 외 막대 */
     function partBar(p) {
@@ -2030,18 +2035,17 @@
       var open = OPEN_FAM[p.name] != null ? OPEN_FAM[p.name] : p.name === meName;
       var sh = res.share[p.name] || 0, pt = res.parts[p.name] || { stay: 0, other: 0 }, n = R.num(p.people, 0), bal = res.balance[p.name] || 0;
       var nightsTxt = p.nights.length < o.nights ? '·' + p.nights.length + '박' : '';
-      var main = SETTLE_VIEW === '1인' ? h('span.famamt', h('b', won(pp(sh, n))), h('small', ' 1인')) : h('span.famamt', h('b', won(sh)), h('small', ' 1인 ' + amt(pp(sh, n))));
+      var main = SETTLE_VIEW === '1인' ? h('span.famamt', h('b', (Math.abs(sh / (n || 1) - pp(sh, n)) < 0.005 ? '' : '약 ') + won(pp(sh, n))), h('small', ' 1인')) : h('span.famamt', h('b', won(sh)), h('small', ' ' + perTxt(sh, n)));
       return h('div.famres' + p.cls + (p.name === meName ? '.me' : '') + (open ? '.open' : ''),
         h('button.famhead', { onclick: function () { OPEN_FAM[p.name] = !open; rerender(); } },
           h('span.fname', p.icon + ' ' + p.label, h('small', ' ' + n + '명' + nightsTxt)), main),
         partBar(p),
         open ? h('div.famdetail',
-          pt.stay ? h('div.kv', h('span', '🌙 숙박'), h('span', amt(pt.stay) + h0(' · 1인 ' + amt(pp(pt.stay, n))))) : null,
-          h('div.kv', h('span', '👥 그 외'), h('span', amt(pt.other) + h0(' · 1인 ' + amt(pp(pt.other, n))))),
-          pt.adj ? h('div.kv', h('small.muted', '반올림 조정'), h('small.muted', (pt.adj > 0 ? '+' : '−') + amt(Math.abs(pt.adj)))) : null,
+          pt.stay ? h('div.kv', h('span', '🌙 숙박'), h('span', amt(pt.stay) + '원', h('small', ' · ' + perTxt(pt.stay, n)))) : null,
+          h('div.kv', h('span', '👥 그 외'), h('span', amt(pt.other) + '원', h('small', ' · ' + perTxt(pt.other, n)))),
           h('div.kv.sum', h('b', '최종 부담'), h('b', won(sh))),
-          h('div.kv', h('span', '낸 돈'), h('span', res.paid[p.name] ? amt(res.paid[p.name]) : (p.name === host.name || noCost[p.name] ? '0' : '안 올림'))),
-          h('div.kv', h('span', bal >= 0 ? '받을 돈' : '보낼 돈'), sign(bal)),
+          h('div.kv', h('span', '낸 돈'), h('span', res.paid[p.name] ? won(res.paid[p.name]) : (p.name === host.name || noCost[p.name] ? '0원' : '안 올림'))),
+          h('div.kv', h('span', bal > 0 ? '받을 돈' : bal < 0 ? '보낼 돈' : '주고받을 돈'), bal ? h('b.' + (bal > 0 ? 'plus' : 'minus'), won(Math.abs(bal))) : h('span', '없음')),
           h('details.items', h('summary', '비용별로 보기 (' + (res.breakdown[p.name] || []).length + '건)'),
             (res.breakdown[p.name] || []).map(function (b) { return h('div.kv', h('small', b.name + ' · ' + RULE_LABEL[b.rule]), h('small', amt(b.amount))); }))) : null);
     }
@@ -2053,15 +2057,15 @@
         h('h3', '🧮 이렇게 나눴어요'),
         res.basis.map(function (b) {
           var who = b.with.length ? ' (' + b.with.map(function (n) { return plabel(parties, n); }).join('·') + '만)' : '';
-          var title = (b.rule === '박' ? '🌙 ' : b.rule === '인원' ? '👥 ' : '🏠 ') + (b.names.length === 1 ? b.names[0] : b.names.slice(0, 2).join('·') + (b.names.length > 2 ? ' 등 ' + b.names.length + '건' : '')) + who;
+          var title = (b.rule === '박' ? '🌙 ' : b.rule === '인원' ? '👥 ' : '🏠 ') + (b.names.length === 1 ? b.names[0] : (b.rule === '박' ? '숙박 등 ' : '그 외 비용 ') + b.names.length + '건') + who;
           var rows = b.rule === '박' ? b.nights.map(function (nt) {
-            return h('small', nightLabel(o.start, nt.k) + ' ' + amt(nt.amount) + ' ÷ ' + nt.families + '가족 = ', h('b', amt(r10(nt.each))),
+            return h('small', nightLabel(o.start, nt.k) + ' ' + ex(nt.amount) + ' ÷ ' + nt.families + '가족 = ', h('b', ex(nt.each)),
               nt.missing.length ? ' (' + nt.missing.map(function (n) { return plabel(parties, n); }).join('·') + ' 빠짐)' : '');
-          }) : b.rule === '인원' ? [h('small', amt(b.total) + ' ÷ ' + b.people + '명 = 1인 ', h('b', amt(r10(b.perPerson))))]
-            : [h('small', amt(b.total) + ' ÷ ' + b.families + '가족 = 가족당 ', h('b', amt(r10(b.perFamily))))];
+          }) : b.rule === '인원' ? [h('small', amt(b.total) + ' ÷ ' + b.people + '명 = 1인 ', h('b', ex(b.perPerson)))]
+            : [h('small', amt(b.total) + ' ÷ ' + b.families + '가족 = 가족당 ', h('b', ex(b.perFamily)))];
           return h('div.brule.' + (b.rule === '박' ? 'r-n' : 'r-o'), h('div.kv', h('b', title), h('span', amt(b.total))), rows);
         }),
-        h('small.hint', '1원 단위까지 나눠요.' + (res.rounding.left ? ' 1원 미만 끝전 ' + res.rounding.left + '원은 소수점이 큰 가족(' + res.rounding.who.map(function (n) { return plabel(parties, n); }).join('·') + ')에 1원씩 더했어요.' : '')),
+        h('small.hint', '가족별 금액은 1원 단위로 나눠요.' + (res.rounding.left ? ' 1원 미만 끝전 ' + res.rounding.left + '원은 소수점이 큰 가족(' + res.rounding.who.map(function (n) { return plabel(parties, n); }).join('·') + ')에 1원씩 더했어요.' : '')),
         h('small.hint', '전체 ' + allPeople + '명 · ' + parties.length + '가족 · ' + o.nights + '박'));
     }
     var meP = parties.filter(function (p) { return p.name === meName; })[0];
@@ -2079,11 +2083,11 @@
       !o.isHost && meP && res.total && !meMissing ? h('div.card.myburden',
         h('small', meP.icon + ' ' + meP.label + ' 최종 부담' + (missing.length ? ' (지금 기준)' : '')),
         h('div.big', won(res.share[meName] || 0)),
-        h('small', meP.people + '명 · 1인 ' + won(pp(res.share[meName] || 0, R.num(meP.people, 0)))),
+        h('small', meP.people + '명 · ' + perTxt(res.share[meName] || 0, R.num(meP.people, 0)) + '원'),
         partBar(meP),
         (res.parts[meName] || {}).stay ? h('div.kv', h('small', '🌙 숙박'), h('small', amt(res.parts[meName].stay))) : null,
         h('div.kv', h('small', '👥 그 외'), h('small', amt((res.parts[meName] || {}).other || 0))),
-        (res.parts[meName] || {}).adj ? h('div.kv', h('small', '반올림 조정'), h('small', amt(res.parts[meName].adj))) : null,
+
         h('div.kv', h('small', '낸 돈'), h('small', amt(res.paid[meName] || 0))),
         mine.length ? h('p.mine', mine.map(function (x) {
           return x.from === meName ? '💸 ' + plabel(parties, x.to) + '에게 ' + won(x.amount) + ' 보내면 돼요' : '💰 ' + plabel(parties, x.from) + '에게서 ' + won(x.amount) + ' 받아요';
@@ -2096,7 +2100,7 @@
         parties.map(famCard)) : null,
       multi && res.total ? h('div.card',
         h('h3', '💸 송금'),
-        o.via !== 'direct' && o.isHost ? h('p.hint', '받을 돈 ' + won(recv.reduce(function (a, x) { return a + x.amount; }, 0)) + ' · 보낼 돈 ' + won(send.reduce(function (a, x) { return a + x.amount; }, 0))) : null,
+        o.via !== 'direct' && o.isHost ? h('p.hint', host.label + josa(host.label, '이', '가') + ' 받을 돈 ' + won(recv.reduce(function (a, x) { return a + x.amount; }, 0)) + ' · 보낼 돈 ' + won(send.reduce(function (a, x) { return a + x.amount; }, 0))) : null,
         res.transfers.length ? res.transfers.map(function (x) {
           var hl = x.from === meName || x.to === meName;
           return h('div.transfer' + (hl ? '.hl' : ''), plabel(parties, x.from) + ' → ' + plabel(parties, x.to) + '  ', h('b', won(x.amount)));
@@ -2105,7 +2109,7 @@
       !o.isHost && o.onAdd && !meMissing ? h('button.btn.wide', { onclick: o.onAdd }, '+ 우리가 결제한 비용 올리기') : null,
       o.isHost && multi ? h('button.card.famsum', { onclick: o.onFamilies },
         h('div.kv', h('b', '👥 가족별 인원·묵은 밤'), h('span', '›')),
-        h('small', parties.map(function (p) { return p.label + ' ' + p.people + '명' + (p.nights.length < o.nights ? ' ' + p.nights.length + '박' : ''); }).join(' · '))) : null,
+        h('small', parties.map(function (p) { return p.label + ' ' + p.people + '명' + (p.nights.length < o.nights ? '(' + p.nights.length + '박)' : ''); }).join(' · '))) : null,
       // 비용 내역
       h('div.card',
         h('div.kv', h('h3', '🧾 비용 내역'), h('small', groups.length + '건')),
