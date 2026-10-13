@@ -329,7 +329,7 @@
   function isChecked(l) { return !!(l.pack || l.done); }
   /** 화면에 보이는 준비물 (예전 수납함 줄·정산 항목 제외) */
   function liveLines(lines) {
-    return lines.filter(function (l) { return l.deleted !== 'Y' && l.kind !== '수납함' && l.kind !== '정산'; });
+    return lines.filter(function (l) { return l.deleted !== 'Y' && l.kind !== '수납함' && l.kind !== '정산' && l.kind !== '메뉴'; });
   }
   /** 우리 가족 체크리스트: 우리만 + 함께 중 우리 가족 담당 */
   function ourLines(lines) {
@@ -350,7 +350,7 @@
   /** 같이 챙기기 대상: 공용 짐 + 장보기 + 정산 항목 */
   function sharedLines(lines) {
     return lines.filter(function (l) {
-      return l.deleted !== 'Y' && (yes(l.shared) || l.kind === '장보기' || l.kind === '정산' || isOtherParty(l));
+      return l.deleted !== 'Y' && l.kind !== '메뉴' && (yes(l.shared) || l.kind === '장보기' || l.kind === '정산' || isOtherParty(l));
     });
   }
 

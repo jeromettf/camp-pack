@@ -167,6 +167,10 @@
     else if (p[0] === 'new') { el = vWizard('new', null, r.q); showNav = false; }
     else if (p[0] === 'trip' && p[2] === 'edit') { el = vWizard('edit', p[1], r.q); showNav = false; }
     else if (p[0] === 'trip' && p[2] === 'settle') { el = vSettle(p[1]); showNav = false; }
+    else if (p[0] === 'trip' && p[2] === 'meals') { el = vMeals(p[1]); showNav = false; }
+    else if (p[0] === 'recipes') { el = vRecipes(r.q); showNav = false; }
+    else if (p[0] === 'recipe') { el = vRecipe(p[1], r.q); showNav = false; }
+    else if (p[0] === 'recipe-edit') { el = vRecipeEdit(p[1]); showNav = false; }
     else if (p[0] === 'trip') { el = vTrip(p[1]); showNav = false; }
     else if (p[0] === 'review') { location.replace('#/trip/' + p[1]); return; }
     else if (p[0] === 'history') { el = vHistory(); navActive = '#/history'; }
@@ -747,6 +751,8 @@
     }
     var pl = placeOf(t), comps = R.parseCompanions(t.companions), hasComp = comps.length > 0;
     var tab = tripTab(t, hasComp, lines), und = undecidedOf(lines).length;
+    // 식단이 있으면 레시피를 불러와 장보기·도구 줄을 맞춰 둠 (다른 기기·동행 가족이 바꾼 것 반영)
+    if (lines.some(function (l) { return l.kind === '메뉴'; })) { loadRecipes(); if (RCP.builtin) setTimeout(function () { if (cur.name === 'trip') syncMenu(t); }, 0); }
     var banners = tripBanners(t, lines);
     return h('div.page.trip-page',
       top(t.title, {
@@ -771,6 +777,7 @@
     var done = mine.filter(R.isChecked).length, left = mine.length - done, onlyLeft = !!local.onlyLeft;
     var shown = onlyLeft ? mine.filter(function (l) { return !R.isChecked(l); }) : mine;
     return [
+      mealCard(t, lines),
       h('div.stagehead',
         h('div', h('b', (hasComp ? ourName() + ' · ' : '') + (mine.length ? (left ? left + '개 남음' : '모두 챙겼어요 🎉') : '목록이 비어 있어요')),
           h('small', mine.length + '개 중 ' + done + '개 챙김 · 가족 누구 휴대폰에서 체크해도 같은 목록')),
@@ -867,7 +874,8 @@
   }
   /** 뺀 준비물 목록 (되살리기) */
   function removedCard(lines) {
-    var gone = lines.filter(function (l) { return l.deleted === 'Y' && l.kind !== '수납함' && l.kind !== '정산'; });
+    // 메뉴가 빠져서 자동으로 지운 재료·도구(menuId 비움)와 메뉴 줄 자체는 제외
+    var gone = lines.filter(function (l) { return l.deleted === 'Y' && l.kind !== '수납함' && l.kind !== '정산' && l.kind !== '메뉴' && !((l.source === '메뉴재료' || l.source === '메뉴도구') && !l.menuId); });
     if (!gone.length) return null;
     return h('details.card.removed', h('summary', '🗑️ 이번 캠핑에서 뺀 준비물 ', h('small', gone.length + '개')),
       gone.map(function (l) {
@@ -1058,6 +1066,7 @@
     var close = U.sheet(t.title, h('div.menu',
       h('button', { onclick: function () { close(); W = null; go('#/trip/' + t.id + '/edit'); } }, '✏️ 조건 수정 (날짜·인원·동행·날씨)'),
       hasComp ? h('button', { onclick: function () { close(); U.sheet('동행 가족 링크', linkCard(t, S.linesOf(t.id), partyList(t))); } }, '🔗 동행 가족 전용 링크 보내기·끄기') : null,
+      h('button', { onclick: function () { close(); go('#/trip/' + t.id + '/meals'); } }, '🍳 식단표·메뉴'),
       hasComp ? h('button', { onclick: function () { close(); go('#/trip/' + t.id + '/settle'); } }, '💰 정산') : null,
       h('button', { onclick: function () { close(); editTrip(t); } }, '🏷️ 이름·메모·별점'),
       h('button', { onclick: function () { close(); W = null; go('#/new?from=' + t.id); } }, '↻ 이 캠핑처럼 새 캠핑 만들기'),
@@ -1404,7 +1413,7 @@
       });
     }
     draw();
-    return h('div.page', top('준비물 창고'), storeTabs('#/items'),
+    return h('div.page', top('준비물 창고', { right: h('a.btn.small', { href: '#/recipes' }, '🍳 레시피') }), storeTabs('#/items'),
       lint.length ? h('div.card.lint', h('h3', '⚠️ 규칙 점검 ' + lint.length + '건'), h('small.hint', '이 항목들은 조건이 잘못되어 목록에서 빠질 수 있어요'),
         lint.map(function (p) { return h('a.irow', { href: '#/item/' + p.item.id }, h('div', h('b', p.item.name || '(이름 없음)'), h('small', p.problems.join(', '))), h('span', '›')); })) : null,
       h('div.row2', search, h('a.btn.primary', { href: '#/item/new' }, '+ 추가')),
@@ -2224,7 +2233,7 @@
         return h('button.whobtn', { onclick: function () { try { localStorage.setItem('cp.gf.' + token, c.name); } catch (e) {} rerender(); } }, h('span', famIcon(comps, c.name)), c.name);
       })));
     var parties = partiesOf(d.ourName, d.ourPeople, comps), myIcon = famIcon(comps, fam);
-    var items = d.lines.filter(function (l) { return l.kind !== '정산' && l.deleted !== 'Y'; });
+    var items = d.lines.filter(function (l) { return l.kind !== '정산' && l.kind !== '메뉴' && l.deleted !== 'Y'; });
     var und = items.filter(function (l) { return l.party === '미정'; });
     var mine = items.filter(function (l) { return l.party === fam; });
     var done = mine.filter(function (l) { return l.pack; }).length;
@@ -2299,6 +2308,7 @@
         guestSend([{ t: 'lines', id: newId(), set: { kind: kind, name: n, qty: 1, scope: d.fam ? scope : '' } }]);
         U.toast(n + (d.fam && scope ? ' 추가 (🔒 우리만)' : ' 추가 (🤝 공유)'));
       } }, '추가'))),
+      guestMealsCard(d, fam, parties),
       und.length ? h('section.grp', h('div.grp-head', h('b', '🤔 아직 배정 안 된 공용 준비물'), h('small', und.length + '개')),
         und.map(function (l) {
           return h('div.sline',
@@ -2318,6 +2328,355 @@
       h('p.ver', (d.fam ? '🔒 ' + fam + ' 전용 링크 · ' : '') + d.ourName + ' 공유 · 로그인 없이 이 캠핑에서 맡은 것만 보여요 · 체크는 바로 저장되고, 인터넷이 끊겨도 연결되면 자동 전송돼요'));
   }
 
+
+  /* ───────── 메뉴·식단표 ───────── */
+  var Menu = window.CampMenu;
+  var RCP = { builtin: null, dict: null, loading: null, err: false };
+  function loadRecipes() {
+    if (RCP.builtin || RCP.loading) return RCP.loading;
+    var get = function (u) { return fetch(u).then(function (r) { if (!r.ok) throw new Error(u); return r.json(); }); };
+    RCP.loading = Promise.all([get('data/recipes.json'), get('data/ingredients.json')]).then(function (a) {
+      RCP.builtin = a[0].recipes; RCP.dict = a[1]; RCP.loading = null; RCP.err = false; rerender();
+    }, function () { RCP.loading = null; RCP.err = true; rerender(); });
+    return RCP.loading;
+  }
+  function recipesAll(guest) { return Menu.mergeRecipes(RCP.builtin || [], guest ? [] : (D().recipes || [])); }
+  function recipeById(id, guest) { return recipesAll(guest).filter(function (r) { return r.id === id; })[0]; }
+  function mealsOf(lines) {
+    return lines.filter(function (l) { return l.kind === '메뉴' && l.deleted !== 'Y'; })
+      .sort(function (a, b) { return Menu.mealOrder(a.meal) - Menu.mealOrder(b.meal); });
+  }
+  function peopleOf(t) { return partyList(t).reduce(function (a, p) { return a + R.num(p.people, 0); }, 0) || 1; }
+  function mealLabel(t, key) {
+    var p = Menu.parseMeal(key); if (!p) return '아무 때';
+    var d = Menu.days(t.start, t.end)[p.day - 1];
+    return (d ? U.md(d.date) + ' ' : p.day + '일차 ') + p.slot;
+  }
+  function recipeMap(guest) { var m = {}; recipesAll(guest).forEach(function (r) { m[r.id] = r; }); return m; }
+  /** 식단 → 장보기·도구·기본양념 줄 맞추기 (바뀐 게 있을 때만 저장) */
+  function syncMenu(t) {
+    if (!RCP.builtin || !t) return 0;
+    var lines = S.linesOf(t.id), hasComp = R.parseCompanions(t.companions).length > 0;
+    if (!lines.some(function (l) { return l.kind === '메뉴' || l.source === '메뉴재료' || l.source === '메뉴도구'; })) return 0;
+    var p = Menu.plan(mealsOf(lines), { recipes: recipeMap(), dict: RCP.dict, defaultServings: peopleOf(t), hasComp: hasComp });
+    var ops = Menu.syncOps(p, { tripId: t.id, lines: lines, items: D().items, hasComp: hasComp });
+    if (ops.length) S.mutate(ops);
+    return ops.length;
+  }
+  function addMeal(t, set) {
+    var hasComp = R.parseCompanions(t.companions).length > 0;
+    S.mutate([{ t: 'lines', id: S.uid('L'), set: Object.assign({ tripId: t.id, kind: '메뉴', category: '식단', source: '메뉴',
+      shared: hasComp ? 'Y' : '', party: hasComp ? '미정' : '', qty: String(peopleOf(t)), note: '', itemId: '' }, set) }]);
+    syncMenu(t);
+  }
+  function updMeal(t, m, set) { S.mutate([{ t: 'lines', id: m.id, set: set }]); syncMenu(t); }
+
+  /** 날짜 + 끼니 고르기 ('아무 때' 포함) */
+  function mealPicker(t, key, onPick) {
+    var box = h('div'), p = Menu.parseMeal(key), day = p ? p.day : 0, slot = p ? p.slot : '';
+    var ds = Menu.days(t.start, t.end);
+    function draw() {
+      box.innerHTML = '';
+      box.appendChild(U.chips(ds.map(function (d) { return { value: d.n, label: U.md(d.date) + ' ' + d.n + '일차' }; }).concat([{ value: 0, label: '아무 때' }]), [day],
+        function (v) { day = v; if (day && !slot) slot = '저녁'; onPick(Menu.mealKey(day, slot)); draw(); }));
+      if (day) box.appendChild(U.chips(Menu.SLOTS, [slot], function (v) { slot = v; onPick(Menu.mealKey(day, slot)); draw(); }));
+    }
+    draw();
+    return box;
+  }
+  function servingBox(n, onPick) {
+    var box = h('div');
+    function draw() { box.innerHTML = ''; box.appendChild(U.stepper(n, function (v) { n = v; onPick(v); draw(); }, 1)); }
+    draw();
+    return box;
+  }
+  function mealPartyChips(t, value, onPick) {
+    var parties = partyList(t), box = h('div');
+    function draw() {
+      box.innerHTML = '';
+      box.appendChild(U.chips(parties.map(function (p) { return { value: p.name, label: p.icon + ' ' + p.label }; }).concat([{ value: '미정', label: '🤔 미정' }]),
+        [value], function (v) { value = v; onPick(v); draw(); }));
+    }
+    draw();
+    return box;
+  }
+  /** 메뉴 추가 시트: 레시피가 있으면 끼니·인원·담당 + 미리보기, 없으면 직접 적기 */
+  function addMealSheet(t, o) {
+    o = o || {};
+    var hasComp = R.parseCompanions(t.companions).length > 0;
+    var key = o.meal || 'any', n = o.servings || peopleOf(t), party = '미정';
+    if (!o.recipe) {
+      var name = h('input', { type: 'text', placeholder: '예: 홍천 막국수, 편의점 도시락, 과일' }), kind = '외식', kBox = h('div');
+      var drawK = function () { kBox.innerHTML = ''; kBox.appendChild(U.chips(Menu.KINDS, [kind], function (v) { kind = v; drawK(); })); };
+      drawK();
+      var close = U.sheet((key === 'any' ? '' : mealLabel(t, key) + ' · ') + '메뉴 추가', [
+        h('a.btn.wide.primary', { href: '#/recipes?trip=' + t.id + '&meal=' + encodeURIComponent(key), onclick: function () { close(); } }, '📖 레시피 100개에서 고르기'),
+        h('p.hint.center', '또는 레시피 없이 직접 적기 (장보기는 생기지 않아요)'),
+        U.field('메뉴', name), U.field('종류', kBox), U.field('언제', mealPicker(t, key, function (v) { key = v; })),
+      ], [h('button.btn.primary.wide', { onclick: function () {
+        var nm = name.value.trim(); if (!nm) { U.toast('메뉴 이름을 적어 주세요'); name.focus(); return; }
+        addMeal(t, { name: nm, meal: key, note: kind, party: '' }); close(); U.toast(nm + ' 추가');
+      } }, '추가')]);
+      return;
+    }
+    var r = o.recipe, prev = h('div.card.preview');
+    function drawPrev() {
+      prev.innerHTML = '';
+      var fake = { id: 'preview', kind: '메뉴', itemId: r.id, qty: String(n), party: party };
+      var pl = Menu.plan([fake], { recipes: recipeMap(), dict: RCP.dict, hasComp: hasComp });
+      var lines = R.liveLines(S.linesOf(t.id));
+      var have = function (nm) { return lines.some(function (l) { return l.name === nm && l.kind === '물건'; }); };
+      var eq = Object.keys(pl.equipment), merged = pl.groceries.filter(function (g) { return lines.some(function (l) { return l.source === '메뉴재료' && l.name === g.name; }); });
+      prev.appendChild(h('b', '체크리스트에 이렇게 들어가요'));
+      prev.appendChild(h('div.kv', h('span', '🛒 장보기 ' + pl.groceries.length + '개'), h('small', merged.length ? merged.map(function (g) { return g.name; }).slice(0, 3).join('·') + ' 등은 기존 재료와 합쳐요' : '')));
+      prev.appendChild(h('div.kv', h('span', '🍳 도구 ' + eq.length + '개'), h('small', eq.filter(have).length + '개는 이미 목록에 있어요')));
+      if (Object.keys(pl.pantry).length) prev.appendChild(h('div.kv', h('span', '🧂 기본양념'), h('small', Object.keys(pl.pantry).join(', '))));
+    }
+    drawPrev();
+    var close2 = U.sheet(r.name + ' 이번 캠핑에', [
+      U.field('언제', mealPicker(t, key, function (v) { key = v; })),
+      U.field('몇 명 분량', servingBox(n, function (v) { n = v; drawPrev(); }), '기본은 함께 가는 전체 인원이에요'),
+      hasComp ? U.field('누가 준비할까요?', mealPartyChips(t, party, function (v) { party = v; drawPrev(); }), '미정이면 동행 가족이 링크에서 "우리가 맡을게"를 누를 수 있어요') : null,
+      prev,
+    ], [h('button.btn.primary.wide', { onclick: function () {
+      addMeal(t, { name: r.name, itemId: r.id, meal: key, qty: String(n), party: hasComp ? party : '' });
+      close2(); U.toast(r.name + ' → ' + mealLabel(t, key));
+      if (o.back) go('#/trip/' + t.id + '/meals');
+    } }, '추가하기')]);
+  }
+  /** 식단표의 메뉴 하나: 레시피·끼니·인원·담당·빼기 */
+  function mealSheet(t, m) {
+    var hasComp = R.parseCompanions(t.companions).length > 0, r = m.itemId ? recipeById(m.itemId) : null;
+    var close = U.sheet(m.name, [
+      r ? h('a.btn.wide', { href: '#/recipe/' + r.id + '?trip=' + t.id + '&n=' + m.qty, onclick: function () { close(); } }, '📖 레시피 보기') : (m.note ? h('p.hint', m.note + ' · 장보기 없음') : null),
+      U.field('언제', mealPicker(t, m.meal, function (v) { updMeal(t, m, { meal: v }); })),
+      r ? U.field('몇 명 분량', servingBox(R.num(m.qty, peopleOf(t)), function (v) { updMeal(t, m, { qty: String(v) }); }), '바꾸면 장보기 양도 다시 계산돼요') : null,
+      hasComp && r ? U.field('누가 준비할까요?', mealPartyChips(t, m.party || '미정', function (v) { updMeal(t, m, { party: v }); })) : null,
+    ], [h('button.btn.danger.wide', { onclick: function () {
+      close(); updMeal(t, m, { deleted: 'Y' });
+      U.toast(m.name + ' 뺐어요 (재료·도구도 같이)', function () { updMeal(t, m, { deleted: '' }); });
+    } }, '🗑️ 식단에서 빼기')]);
+  }
+
+  /** 캠핑 화면 위쪽 식단표 카드 */
+  function mealCard(t, lines) {
+    var meals = mealsOf(lines);
+    if (!meals.length) return h('a.card.mealcard.empty', { href: '#/trip/' + t.id + '/meals' },
+      h('div.kv', h('b', '🍳 식단표'), h('span.btn.small', '+ 메뉴 고르기')),
+      h('small', '레시피 100개에서 고르면 장보기·조리도구가 체크리스트에 자동으로 들어가요'));
+    var nx = Menu.nextMeal(meals, t.start, U.today(), new Date().getHours());
+    var gro = R.liveLines(lines).filter(function (l) { return l.source === '메뉴재료' && l.kind === '장보기'; });
+    var gDone = gro.filter(R.isChecked).length;
+    return h('a.card.mealcard', { href: '#/trip/' + t.id + '/meals' },
+      h('div.kv', h('b', '🍳 식단표'), h('small', '메뉴 ' + meals.length + '개')),
+      nx ? h('div.nextline', h('small', (phase(t) === '진행중' ? '다음 식사 · ' : '첫 식사 · ') + mealLabel(t, nx.meal)), h('div', nx.items.map(function (m) { return m.name; }).join(' · '))) : null,
+      gro.length ? h('small', '메뉴 재료 ' + gDone + '/' + gro.length + ' 챙김') : null,
+      h('span.morelink', '전체 식단표 ›'));
+  }
+
+  function vMeals(id) {
+    var t = byId('trips', id);
+    if (!t) return empty('캠핑을 찾을 수 없어요');
+    cur.name = 'meals'; cur.live = true;
+    loadRecipes();
+    if (RCP.builtin) setTimeout(function () { if (cur.name === 'meals') syncMenu(t); }, 0);
+    var lines = S.linesOf(id), meals = mealsOf(lines), ds = Menu.days(t.start, t.end);
+    var hasComp = R.parseCompanions(t.companions).length > 0, parties = partyList(t);
+    var nd = U.today(), nh = new Date().getHours(), inTrip = phase(t) === '진행중';
+    var nx = inTrip ? Menu.nextMeal(meals, t.start, nd, nh) : null;
+    function itemRow(m) {
+      return h('button.mitem', { onclick: function () { mealSheet(t, m); } },
+        h('span.mname', m.name), !m.itemId && m.note ? h('span.out', m.note) : null,
+        hasComp && m.itemId ? partyPill(m, parties) : null);
+    }
+    function slotRow(key, label, past) {
+      var ms = meals.filter(function (m) { return m.meal === key; });
+      return h('div.mslot' + (ms.length ? '' : '.vacant') + (past ? '.past' : ''),
+        h('span.st', label), h('div.mlist', ms.length ? ms.map(itemRow) : h('span.muted', '')),
+        h('button.madd', { 'aria-label': label + ' 메뉴 추가', onclick: function () { addMealSheet(t, { meal: key }); } }, '+'));
+    }
+    return h('div.page', top('🍳 식단표', { back: '#/trip/' + id, sub: t.title + ' · ' + U.range(t.start, t.end) + ' · ' + peopleOf(t) + '명',
+      right: h('a.btn.small.primary', { href: '#/recipes?trip=' + id }, '+ 메뉴') }),
+      RCP.err ? h('p.err', '레시피를 불러오지 못했어요. 인터넷 연결 후 다시 열어 주세요.') : null,
+      nx ? h('div.card.nextmeal',
+        h('small', '다음 식사 · ' + mealLabel(t, nx.meal)),
+        h('b', nx.items.map(function (m) { return m.name; }).join(' · ')),
+        nx.items.map(function (m) { var r = m.itemId && recipeById(m.itemId); return r && r.tip ? h('small.hint', '💡 ' + r.name + ': ' + r.tip) : null; })) : null,
+      !meals.length ? h('div.card', h('p', '아직 고른 메뉴가 없어요.'), h('small.hint', '끼니 옆 + 를 누르거나 위의 "+ 메뉴"로 레시피를 골라 보세요. 외식·편의점처럼 레시피 없이 적을 수도 있어요.')) : null,
+      ds.map(function (d) {
+        return h('section.mday', h('div.mday-head', U.md(d.date) + ' · ' + d.n + '일차'),
+          Menu.SLOTS.map(function (s) { var k = 'D' + d.n + '|' + s; return slotRow(k, s, inTrip && Menu.isPast(t.start, k, nd, nh)); }));
+      }),
+      h('section.mday', h('div.mday-head', '아무 때'), slotRow('any', '', false)),
+      h('p.hint', '메뉴를 누르면 레시피 보기·끼니 바꾸기·인원·담당·빼기를 할 수 있어요. 재료는 체크리스트의 장보기에 자동으로 들어가요.'));
+  }
+
+  /* 레시피 찾기 */
+  var RQ = { q: '', cat: '', off: {} };
+  var KEY_EQUIP = ['그리들', '화로대', '프라이팬', '냄비'];
+  function vRecipes(q) {
+    cur.name = 'recipes';
+    loadRecipes();
+    var tripId = q.get('trip'), meal = q.get('meal') || '', t = tripId ? byId('trips', tripId) : null;
+    if (!RCP.builtin) return h('div.page', top('🍳 메뉴 찾기', { back: t ? '#/trip/' + t.id + '/meals' : true }),
+      RCP.err ? h('p.err', '레시피를 불러오지 못했어요. 인터넷 연결 후 다시 열어 주세요.') : empty('레시피 불러오는 중…'));
+    var picked = t ? mealsOf(S.linesOf(t.id)).map(function (m) { return m.itemId; }) : [];
+    var listBox = h('div'), catBox = h('div'), eqBox = h('div');
+    var search = h('input', { type: 'search', placeholder: '찌개, 고기, 감바스, 아이…', value: RQ.q, oninput: function () { RQ.q = search.value; drawList(); } });
+    function drawList() {
+      listBox.innerHTML = '';
+      var off = KEY_EQUIP.filter(function (e) { return RQ.off[e]; });
+      var rs = Menu.search(recipesAll(), RQ.q, RQ.cat, off);
+      listBox.appendChild(h('small.hint', rs.length + '개'));
+      rs.forEach(function (r) {
+        var href = '#/recipe/' + r.id + (t ? '?trip=' + t.id + (meal ? '&meal=' + encodeURIComponent(meal) : '') : '');
+        listBox.appendChild(h('a.card.rcard', { href: href },
+          h('div.kv', h('b', r.name), picked.indexOf(r.id) >= 0 ? h('span.pill', '이번 캠핑 추가됨') : r.custom ? h('span.pill.ps', '우리 레시피') : null),
+          h('small', [r.category, r.time ? r.time + '분' : '', r.level, r.equipment.filter(function (e) { return KEY_EQUIP.indexOf(e) >= 0 || e === '버너'; }).join('·')].filter(Boolean).join(' · ')),
+          r.tags.length ? h('small.tags', r.tags.slice(0, 3).join(' · ')) : null));
+      });
+      if (!rs.length) listBox.appendChild(h('p.muted.center', '찾는 메뉴가 없어요. "+ 내 레시피"로 직접 만들 수 있어요.'));
+    }
+    function drawFilters() {
+      catBox.innerHTML = '';
+      catBox.appendChild(U.chips([{ value: '', label: '전체' }].concat(Menu.CATS.map(function (c) { return { value: c, label: c }; })), [RQ.cat], function (v) { RQ.cat = v; drawFilters(); drawList(); }));
+      eqBox.innerHTML = '';
+      eqBox.appendChild(h('small.lbl', '가져가는 장비 (끄면 그 장비가 필요한 메뉴는 숨겨요)'));
+      eqBox.appendChild(U.chips(KEY_EQUIP, KEY_EQUIP.filter(function (e) { return !RQ.off[e]; }), function (v) { RQ.off[v] = !RQ.off[v]; drawFilters(); drawList(); }));
+    }
+    drawFilters(); drawList();
+    return h('div.page', top('🍳 메뉴 찾기', { back: t ? '#/trip/' + t.id + '/meals' : true, sub: t ? t.title + (meal && meal !== 'any' ? ' · ' + mealLabel(t, meal) : '') : '레시피 ' + recipesAll().length + '개',
+      right: h('a.btn.small', { href: '#/recipe-edit/new' }, '+ 내 레시피') }),
+      search, catBox, eqBox, listBox);
+  }
+
+  /* 레시피 상세 */
+  function recipeBody(r, n, dict) {
+    var DM = Menu.dictMap(dict);
+    return [
+      h('small.hint', [r.category, r.time ? r.time + '분' : '', r.level, '추천 ' + r.slots.join('·')].filter(Boolean).join(' · ') + (r.tags.length ? ' · ' + r.tags.join(', ') : '')),
+      h('h3', '재료 (' + n + '인)'),
+      h('div.ings', r.ingredients.map(function (i) {
+        var d = DM[i.name] || {};
+        return h('div.kv', h('span', i.name + (i.opt ? ' (선택)' : '')), h('span', Menu.fmtAmt(d.unit || '', R.num(i.qty, 0) * n)));
+      })),
+      r.pantry.length ? h('small.hint', '🧂 기본양념: ' + r.pantry.join(', ')) : null,
+      h('h3', '장비'), h('p', r.equipment.join(', ') + (r.alt ? ' · ' + r.alt : '')),
+      h('h3', '만드는 법'), h('ol.rsteps', r.steps.map(function (s) { return h('li', s); })),
+      r.tip ? h('div.card.tipbox', h('b', '💡 캠핑 팁 '), r.tip) : null,
+      r.prep ? h('div.card.tipbox', h('b', '🏠 집에서 미리 '), r.prep) : null];
+  }
+  var RN = {};
+  function vRecipe(id, q) {
+    cur.name = 'recipe';
+    loadRecipes();
+    var tripId = q.get('trip'), t = tripId ? byId('trips', tripId) : null, meal = q.get('meal') || '';
+    if (!RCP.builtin) return h('div.page', top('레시피', { back: true }), RCP.err ? h('p.err', '레시피를 불러오지 못했어요.') : empty('불러오는 중…'));
+    var r = recipeById(id);
+    if (!r) return h('div.page', top('레시피', { back: true }), empty('레시피를 찾을 수 없어요'));
+    var n = RN[id] || R.num(q.get('n'), 0) || (t ? peopleOf(t) : 4);
+    var body = h('div');
+    function draw() { body.innerHTML = ''; recipeBody(r, n, RCP.dict).forEach(function (el) { if (el) body.appendChild(el); }); }
+    draw();
+    var stp = servingBox(n, function (v) { n = v; RN[id] = v; draw(); });
+    return h('div.page', top(r.name, { back: true, right: h('a.btn.small', { href: '#/recipe-edit/' + r.id }, r.custom ? '✏️ 수정' : '✏️ 우리 방식으로') }),
+      h('div.card.kv', h('span', '인원'), stp),
+      body,
+      t ? h('button.btn.primary.wide.big', { onclick: function () { addMealSheet(t, { recipe: r, meal: meal || undefined, servings: n, back: true }); } }, '이번 캠핑에 추가') : null);
+  }
+
+  /* 우리 레시피 만들기·수정 (기본 레시피를 고치면 같은 id 로 우리 버전 저장) */
+  function vRecipeEdit(id) {
+    cur.name = 'recipeEdit';
+    loadRecipes();
+    if (!RCP.builtin) return h('div.page', top('레시피', { back: true }), empty('불러오는 중…'));
+    var isNew = id === 'new', base = isNew ? null : recipeById(id);
+    var E = base ? JSON.parse(JSON.stringify(base)) : { name: '', category: '고기·구이', slots: ['저녁'], time: 30, level: '보통', equipment: ['버너'], tags: [], ingredients: [], pantry: [], steps: [], tip: '', prep: '' };
+    var DM = Menu.dictMap(RCP.dict);
+    var name = h('input', { type: 'text', value: E.name, placeholder: '예: 우리집 김치찌개' });
+    var time = h('input', { type: 'text', inputmode: 'numeric', value: E.time || '', placeholder: '분' });
+    var ings = h('textarea', { rows: 7, placeholder: '한 줄에 하나, 1인 기준\n삼겹살 200\n상추 6\n쌈장 20 (선택)' },
+      E.ingredients.map(function (i) { return i.name + ' ' + i.qty + (i.opt ? ' (선택)' : ''); }).join('\n'));
+    var pantry = h('input', { type: 'text', value: E.pantry.join(', '), placeholder: '소금, 간장, 참기름' });
+    var steps = h('textarea', { rows: 6, placeholder: '한 줄에 한 단계' }, E.steps.join('\n'));
+    var tip = h('input', { type: 'text', value: E.tip, placeholder: '캠핑 팁 (선택)' }), prep = h('input', { type: 'text', value: E.prep, placeholder: '집에서 미리 할 일 (선택)' });
+    function chipBox(opts, sel, multi) {
+      var box = h('div');
+      function draw() { box.innerHTML = ''; box.appendChild(U.chips(opts, multi ? sel : [sel[0]], function (v, on) {
+        if (multi) { var i = sel.indexOf(v); if (i >= 0) sel.splice(i, 1); else sel.push(v); } else sel[0] = v; draw(); })); }
+      draw();
+      return box;
+    }
+    var cat = [E.category], slots = E.slots.slice(), equip = E.equipment.slice();
+    var help = h('small.hint', '재료 이름이 사전에 있으면 단위가 자동으로 붙어요(예: 삼겹살=g, 상추=장). 없는 재료도 그대로 쓸 수 있어요.');
+    function save() {
+      var nm = name.value.trim(); if (!nm) { U.toast('이름을 적어 주세요'); return; }
+      var list = ings.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).map(function (s) {
+        var opt = /\(선택\)$/.test(s); s = s.replace(/\(선택\)$/, '').trim();
+        var m = /^(.*\S)\s+([\d.]+)\s*[a-zA-Z가-힣]*$/.exec(s);
+        var o = m ? { name: m[1], qty: Number(m[2]) } : { name: s, qty: 1 };
+        if (opt) o.opt = true; return o;
+      });
+      var rc = { name: nm, category: cat[0], slots: slots.length ? slots : ['저녁'], time: R.num(time.value, 0), level: E.level, equipment: equip,
+        tags: E.tags, ingredients: list, pantry: R.list(pantry.value), steps: steps.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean), tip: tip.value.trim(), prep: prep.value.trim() };
+      var rid = isNew ? 'RC-' + S.uid('R').slice(2) : id;
+      S.mutate([{ t: 'recipes', id: rid, set: Menu.toRow(rc) }]);
+      U.toast(nm + ' 저장'); go('#/recipe/' + rid);
+    }
+    var eqOpts = Object.keys((RCP.dict && RCP.dict.equipment) || {});
+    return h('div.page', top(isNew ? '내 레시피 만들기' : nmOr(base.name) + ' 수정', { back: true }),
+      !isNew && !base.custom ? h('p.hint', '기본 레시피를 고치면 우리 가족 버전으로 저장되고, 앞으로 이 버전이 보여요.') : null,
+      h('div.card', U.field('이름', name), U.field('분류', chipBox(Menu.CATS, cat, false)), U.field('추천 끼니', chipBox(Menu.SLOTS, slots, true)),
+        U.field('시간(분)', time), U.field('장비', chipBox(eqOpts, equip, true))),
+      h('div.card', U.field('재료 (1인 기준)', ings), help, U.field('기본양념 (장보기 제외, 쉼표로)', pantry)),
+      h('div.card', U.field('만드는 법', steps), U.field('캠핑 팁', tip), U.field('집에서 미리', prep)),
+      h('button.btn.primary.wide.big', { onclick: save }, '저장'),
+      !isNew ? h('button.btn.wide', { onclick: function () {
+        U.ask(base.custom && !(RCP.builtin || []).some(function (b) { return b.id === id; }) ? '레시피 삭제' : '목록에서 숨기기', '메뉴 찾기에서 보이지 않게 해요.', '숨기기', function () {
+          S.mutate([{ t: 'recipes', id: id, set: Object.assign(Menu.toRow(E), { active: 'N' }) }]); go('#/recipes');
+        }, true);
+      } }, base.custom ? '🗑️ 이 레시피 숨기기' : '🙈 이 메뉴 숨기기') : null,
+      !isNew && base.custom && (RCP.builtin || []).some(function (b) { return b.id === id; }) ? h('button.btn.wide', { onclick: function () {
+        // 우리 버전을 지우면 기본 레시피로 돌아감 (행을 비활성화하면 숨김이 되므로 기본값 그대로 다시 저장)
+        var b = RCP.builtin.filter(function (x) { return x.id === id; })[0];
+        S.mutate([{ t: 'recipes', id: id, set: Menu.toRow(b) }]); U.toast('기본 레시피로 되돌렸어요'); go('#/recipe/' + id);
+      } }, '↩️ 기본 레시피로 되돌리기') : null);
+  }
+  function nmOr(s) { return s || '레시피'; }
+
+  /** 동행 가족 화면: 같이 먹는 메뉴 + 메뉴 단위로 맡기 */
+  function guestMealsCard(d, fam, parties) {
+    var meals = mealsOf(d.lines).filter(function (m) { return m.itemId || m.note; });
+    if (!meals.length) return null;
+    loadRecipes();
+    var t = { start: d.trip.start, end: d.trip.end };
+    var groups = {}, order = [];
+    meals.forEach(function (m) { if (!groups[m.meal]) { groups[m.meal] = []; order.push(m.meal); } groups[m.meal].push(m); });
+    function claim(m) {
+      var ops = [{ t: 'lines', id: m.id, set: { party: fam } }];
+      d.lines.forEach(function (l) {
+        if (l.source === '메뉴재료' && l.party === '미정' && l.deleted !== 'Y' && String(l.menuId || '') === m.id) ops.push({ t: 'lines', id: l.id, set: { party: fam } });
+      });
+      guestSend(ops); U.toast(m.name + ' 우리가 맡을게요');
+    }
+    function showRecipe(m) {
+      var r = m.itemId && RCP.builtin ? recipeById(m.itemId, true) : null;
+      if (!r) { U.toast(RCP.builtin ? '레시피가 없는 메뉴예요' : '레시피 불러오는 중…'); return; }
+      U.sheet(r.name, recipeBody(r, R.num(m.qty, 4), RCP.dict).filter(Boolean));
+    }
+    return h('div.card.guestmeals', h('h3', '🍳 같이 먹는 메뉴'),
+      order.map(function (k) {
+        return h('div.gmeal', h('small.lbl', mealLabel(t, k)),
+          groups[k].map(function (m) {
+            var p = parties.filter(function (x) { return x.name === (m.party || '미정'); })[0];
+            return h('div.kv',
+              h('button.linkbtn', { onclick: function () { showRecipe(m); } }, m.name + (m.itemId ? ' 📖' : ''), !m.itemId && m.note ? h('span.out', m.note) : null),
+              m.itemId && (m.party === '미정' || !m.party) ? h('button.btn.small.primary', { onclick: function () { claim(m); } }, '우리가 맡을게') :
+                m.itemId ? h('span.pill' + (p ? p.cls : ''), (p ? p.icon + ' ' + p.label : m.party)) : null);
+          }));
+      }),
+      h('small.hint', '메뉴를 맡으면 그 재료가 우리 체크리스트에 들어와요. 이름을 누르면 레시피를 볼 수 있어요.'));
+  }
 
   /* ───────── 시작 ───────── */
   route(false);

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var LS = { cfg: 'cp.cfg', data: 'cp.data', queue: 'cp.queue', extra: 'cp.extra' };
-  var TABLES = ['items', 'boxes', 'places', 'members', 'trips', 'lines', 'reviews', 'settings'];
+  var TABLES = ['items', 'boxes', 'places', 'members', 'trips', 'lines', 'reviews', 'settings', 'recipes'];
   var POLL_MS = 12000;
 
   function load(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
