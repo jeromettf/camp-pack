@@ -27,12 +27,13 @@ var SCHEMA = {
     ['members', '참여구성원'], ['guestAdults', '손님어른'], ['guestKids', '손님아이'], ['tagsAdd', '추가태그'],
     ['tagsRemove', '제외태그'], ['tags', '적용태그'], ['weather', '날씨'], ['status', '상태'], ['rating', '별점'],
     ['memo', '메모'], ['reviewed', '회고완료'], ['createdBy', '생성자'], ['createdAt', '생성일'], ['updatedAt', '수정일'],
-    ['companions', '동행'], ['shareToken', '공유코드'], ['shareUntil', '공유만료'], ['splitRule', '정산방식'], ['settleVia', '송금방식'], ['ourPeople', '우리인원']] },
+    ['companions', '동행'], ['shareToken', '공유코드'], ['shareUntil', '공유만료'], ['splitRule', '정산방식'], ['settleVia', '송금방식'], ['ourPeople', '우리인원'], ['ourNights', '우리박']] },
   lines: { sheet: '체크', cols: [
     ['id', 'id'], ['tripId', '캠핑id'], ['kind', '종류'], ['itemId', '항목id'], ['name', '이름'], ['category', '카테고리'],
     ['box', '수납함'], ['qty', '수량'], ['owner', '담당자'], ['leave', '두고오기쉬움'], ['warn', '주의'], ['note', '메모'],
     ['source', '출처'], ['pack', '짐싸기'], ['load', '싣기'], ['back', '철수'], ['done', '완료'], ['deleted', '삭제'],
-    ['updatedAt', '수정일'], ['shared', '공용'], ['party', '담당가족'], ['amount', '금액'], ['payer', '결제'], ['addedBy', '추가한가족'], ['scope', '공개범위'], ['meal', '끼니'], ['menuId', '메뉴id']] },
+    ['updatedAt', '수정일'], ['shared', '공용'], ['party', '담당가족'], ['amount', '금액'], ['payer', '결제'], ['addedBy', '추가한가족'], ['scope', '공개범위'], ['meal', '끼니'], ['menuId', '메뉴id'],
+    ['splitRule', '나누기'], ['splitWith', '나눌가족'], ['costGroup', '묶음'], ['splitFrom', '쪼갠원본']] },
   // 우리 가족이 추가·수정한 레시피 (기본 레시피 100개는 앱에 포함, 같은 id 면 이 행이 우선)
   recipes: { sheet: '레시피', log: '레시피', cols: [
     ['id', 'id'], ['name', '이름'], ['category', '분류'], ['slots', '추천끼니'], ['time', '시간'], ['level', '난이도'],
@@ -54,7 +55,7 @@ var DEFAULT_SHARED = ['타프', '타프 폴대', '키친 테이블', '선반·�
   '메인 랜턴', '릴선(전기 연장선)', '멀티탭', '블루투스 스피커', '보드게임', '쓰레기봉투', '모기 퇴치기·모기향', '서큘레이터'];
 var LOGIN_MAX_FAIL = 10;      // 10분 안에 이만큼 틀리면
 var LOGIN_LOCK_SEC = 600;     // 10분 잠금
-var SHARE_FIELDS = ['id', 'kind', 'itemId', 'name', 'category', 'qty', 'note', 'party', 'pack', 'amount', 'payer', 'addedBy', 'shared', 'source', 'scope', 'meal', 'menuId'];
+var SHARE_FIELDS = ['id', 'kind', 'itemId', 'name', 'category', 'qty', 'note', 'party', 'pack', 'amount', 'payer', 'addedBy', 'shared', 'source', 'scope', 'meal', 'menuId', 'splitRule', 'splitWith', 'costGroup', 'splitFrom'];
 
 /** 비어 있을 때만 채우는 기본값 */
 var DEFAULT_BOXES = ['텐트가방', '침구가방', '주방박스', '식기박스', '전기·조명박스', '소품박스', '세면가방', '의류가방',
@@ -332,9 +333,9 @@ function shareGet_(token) {
   var lines = readTable_('lines').filter(function (l) { return l.tripId === t.id && seenBy_(l, t._fam); }).map(function (l) {
     var o = {}; SHARE_FIELDS.forEach(function (f) { o[f] = l[f]; }); return o;
   });
-  var comps = parseComps_(t).map(function (c) { return { name: c.name, adults: c.adults, kids: c.kids }; }); // 다른 가족 링크 코드는 숨김
+  var comps = parseComps_(t).map(function (c) { return { name: c.name, adults: c.adults, kids: c.kids, nights: c.nights || [] }; }); // 다른 가족 링크 코드는 숨김
   return { ok: true, version: version_(), ourName: props_().getProperty('FAMILY_NAME') || '우리 가족', ourPeople: people, fam: t._fam,
-    trip: { title: t.title, start: t.start, end: t.end, place: place ? place.name : '', companions: JSON.stringify(comps), splitRule: t.splitRule, settleVia: t.settleVia || 'hub' },
+    trip: { title: t.title, start: t.start, end: t.end, place: place ? place.name : '', companions: JSON.stringify(comps), splitRule: t.splitRule, settleVia: t.settleVia || 'hub', ourNights: t.ourNights || '' },
     lines: lines };
 }
 

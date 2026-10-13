@@ -406,6 +406,115 @@
     return { total: total, paid: paid, share: share, balance: bal, transfers: transfers, items: items };
   }
 
+  /* ── 내역별 정산 ── */
+  var NO_COST = '결제 없음';
+  /** 비용 이름으로 나누는 방법 추천: 숙박·사이트·캠핑장·이용료 → 박 단위, 장보기·먹거리 → 인원, 그 밖 → 기본값 */
+  function ruleFor(l, fallback) {
+    var n = String(l.name || '');
+    if (/숙박|사이트|캠핑장|이용료/.test(n)) return '박';
+    if (l.kind === '장보기' || /장보기|고기|식재료|술|음료|간식/.test(n)) return '인원';
+    return fallback === '가족' ? '가족' : '인원';
+  }
+  function normName(n) { return String(n || '').replace(/\s+/g, '').toLowerCase(); }
+  /** 같은 묶음 키: 직접 정한 묶음 > 쪼갠 조각 > 이름 */
+  function costKey(l) { return l.costGroup || (l.splitFrom ? 'split:' + l.id : 'name:' + normName(l.name)); }
+  /**
+   * 비용 줄 → 묶음별 정산.
+   * parties: [{name, people, nights:[1,2]}] (첫 번째 = 호스트), o: { rule(기본), via, nights(캠핑 박 수) }
+   * 반환: { total, paid, share, balance, transfers, groups:[{key,name,total,rule,with,lines,payers,per}], breakdown:{가족:[{name,amount}]} }
+   */
+  function settleItems(lines, parties, o) {
+    o = o || {};
+    var names = parties.map(function (p) { return p.name; }), byName = {};
+    parties.forEach(function (p) { byName[p.name] = p; });
+    var N = Math.max(1, num(o.nights, 1));
+    var live = lines.filter(function (l) { return l.deleted !== 'Y'; });
+    var hasKids = {}; live.forEach(function (l) { if (l.splitFrom) hasKids[l.splitFrom] = 1; });
+    var costs = live.filter(function (l) {
+      if (hasKids[l.id]) return false; // 쪼갠 원본은 조각으로 계산
+      if (l.name === NO_COST && !num(l.amount, 0)) return false;
+      return l.kind === '장보기' || l.kind === '정산' || num(String(l.amount || '').replace(/[^\d.-]/g, ''), 0) > 0;
+    });
+    var gmap = {}, groups = [];
+    costs.forEach(function (l) {
+      var k = costKey(l), g = gmap[k];
+      if (!g) { g = gmap[k] = { key: k, name: l.name, total: 0, lines: [], payers: [], rule: '', with: [] }; groups.push(g); }
+      g.lines.push(l);
+      if (!g.rule && l.splitRule) g.rule = l.splitRule;
+      if (!g.with.length && l.splitWith) g.with = list(l.splitWith);
+    });
+    var paid = {}, share = {}, breakdown = {}, total = 0;
+    names.forEach(function (n) { paid[n] = 0; share[n] = 0; breakdown[n] = []; });
+    groups.forEach(function (g) {
+      if (!g.rule) g.rule = ruleFor(g.lines[0], o.rule);
+      g.lines.forEach(function (l) {
+        var a = Math.round(num(String(l.amount || '').replace(/[^\d.-]/g, ''), 0));
+        if (!a) return;
+        g.total += a;
+        if (l.payer && paid[l.payer] !== undefined) { paid[l.payer] += a; g.payers.push({ payer: l.payer, amount: a, id: l.id }); }
+        else g.payers.push({ payer: l.payer || '', amount: a, id: l.id });
+      });
+      total += g.total;
+      var who = g.with.filter(function (n) { return byName[n]; });
+      if (!who.length) who = names.slice();
+      var per = {};
+      who.forEach(function (n) { per[n] = 0; });
+      if (!g.total) { g.per = per; return; }
+      if (g.rule === '박') {
+        for (var k = 1; k <= N; k++) {
+          var stay = who.filter(function (n) { var ns = byName[n].nights; return !ns || !ns.length || ns.indexOf(k) >= 0; });
+          if (!stay.length) stay = who;
+          stay.forEach(function (n) { per[n] += g.total / N / stay.length; });
+        }
+      } else {
+        var w = {}, sw = 0;
+        who.forEach(function (n) { w[n] = g.rule === '인원' ? Math.max(0, num(byName[n].people, 0)) : 1; sw += w[n]; });
+        if (!sw) { who.forEach(function (n) { w[n] = 1; }); sw = who.length; }
+        who.forEach(function (n) { per[n] = g.total * w[n] / sw; });
+      }
+      Object.keys(per).forEach(function (n) {
+        per[n] = Math.round(per[n] / 10) * 10;
+        share[n] += per[n];
+        if (per[n]) breakdown[n].push({ name: g.name, amount: per[n], rule: g.rule, key: g.key });
+      });
+      g.per = per;
+    });
+    var bal = {};
+    names.forEach(function (n) { bal[n] = paid[n] - share[n]; });
+    // 반올림 차액은 가장 많이 낸 가족이 흡수
+    var diff = total - names.reduce(function (a, n) { return a + share[n]; }, 0);
+    if (diff && names.length) {
+      var top = names.slice().sort(function (a, b) { return paid[b] - paid[a]; })[0];
+      share[top] += diff; bal[top] -= diff;
+    }
+    var transfers = [];
+    if (o.via === 'hub') {
+      names.slice(1).forEach(function (n) {
+        if (bal[n] < 0) transfers.push({ from: n, to: names[0], amount: -bal[n] });
+        else if (bal[n] > 0) transfers.push({ from: names[0], to: n, amount: bal[n] });
+      });
+    } else {
+      var cred = names.filter(function (n) { return bal[n] > 0; }).map(function (n) { return { n: n, v: bal[n] }; });
+      var debt = names.filter(function (n) { return bal[n] < 0; }).map(function (n) { return { n: n, v: -bal[n] }; });
+      cred.sort(function (a, b) { return b.v - a.v; }); debt.sort(function (a, b) { return b.v - a.v; });
+      var i = 0, j = 0;
+      while (i < debt.length && j < cred.length) {
+        var x = Math.min(debt[i].v, cred[j].v);
+        if (x > 0) transfers.push({ from: debt[i].n, to: cred[j].n, amount: x });
+        debt[i].v -= x; cred[j].v -= x;
+        if (!debt[i].v) i++;
+        if (!cred[j].v) j++;
+      }
+    }
+    return { total: total, paid: paid, share: share, balance: bal, transfers: transfers, groups: groups, breakdown: breakdown };
+  }
+  /** 가족이 묵은 밤 목록 (비어 있으면 전부) */
+  function nightsOf(v, N) {
+    var a = list(v).map(Number).filter(function (x) { return x >= 1 && x <= N; });
+    if (!a.length) { a = []; for (var i = 1; i <= N; i++) a.push(i); }
+    return a;
+  }
+
   return {
     RULES: RULES, STAGES: STAGES, list: list, yes: yes, active: active, num: num,
     daysBetween: daysBetween, addDays: addDays, seasonTag: seasonTag, deriveContext: deriveContext,
@@ -415,5 +524,6 @@
     parseWeather: parseWeather, unusedSuggestions: unusedSuggestions,
     parseCompanions: parseCompanions, isOtherParty: isOtherParty, settle: settle, sharedLines: sharedLines,
     shortage: shortage, safeLink: safeLink, isChecked: isChecked, liveLines: liveLines, ourLines: ourLines, isTogether: isTogether,
+    settleItems: settleItems, ruleFor: ruleFor, costKey: costKey, nightsOf: nightsOf, NO_COST: NO_COST,
   };
 });

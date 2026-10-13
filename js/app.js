@@ -1794,16 +1794,17 @@
   function famIdx(comps, name) { for (var i = 0; i < comps.length; i++) if (comps[i].name === name) return i; return -1; }
   function famIcon(comps, name) { if (!name || name === '우리') return '🏠'; var i = famIdx(comps, name); return i < 0 ? '🤝' : FAM_DOTS[i % 6]; }
   function famCls(comps, name) { var i = !name || name === '우리' ? -1 : famIdx(comps, name); return i < 0 ? '' : '.fc' + (i % 6); }
-  function partiesOf(ourLabel, ourPeople, comps) {
-    return [{ name: '우리', label: ourLabel, people: ourPeople, icon: '🏠', cls: '' }].concat(comps.map(function (c) {
-      return { name: c.name, label: c.name, people: R.num(c.adults, 0) + R.num(c.kids, 0), icon: famIcon(comps, c.name), cls: famCls(comps, c.name) };
+  function partiesOf(ourLabel, ourPeople, comps, ourNights, N) {
+    N = N || 1;
+    return [{ name: '우리', label: ourLabel, people: ourPeople, icon: '🏠', cls: '', nights: R.nightsOf(ourNights, N) }].concat(comps.map(function (c) {
+      return { name: c.name, label: c.name, people: R.num(c.adults, 0) + R.num(c.kids, 0), icon: famIcon(comps, c.name), cls: famCls(comps, c.name), nights: R.nightsOf(c.nights, N) };
     }));
   }
   function partyList(t) {
     var ids = R.list(t.members);
     var ours = D().members.filter(function (m) { return ids.indexOf(m.id) >= 0 && m.type !== '반려견'; }).length;
     if (R.num(t.ourPeople, 0) > 0) ours = R.num(t.ourPeople, 0); // 정산 화면에서 직접 정한 인원
-    return partiesOf(ourName(), ours, R.parseCompanions(t.companions));
+    return partiesOf(ourName(), ours, R.parseCompanions(t.companions), t.ourNights, Math.max(1, R.daysBetween(t.start, t.end)));
   }
   function plabel(parties, name) { return !name || name === '우리' ? parties[0].label : name; }
   function partyOf(l) { return l.party || '우리'; }
@@ -1821,11 +1822,16 @@
   }
 
   /** 정산 결과만 (다녀온 뒤 카톡 공유용) */
-  function settleText(title, range, lines, parties, rule, via) {
-    var res = R.settle(moneyLines(lines), parties, rule, via);
-    var out = ['💰 ' + title + ' (' + range + ') 정산', '총 ' + won(res.total) + ' · ' + (rule === '가족' ? '가족 수대로' : '인원 수대로') + ' 나눔', ''];
+  function settleText(title, range, lines, parties, rule, via, nights) {
+    var res = R.settleItems(moneyLines(lines), parties, { rule: rule, via: via, nights: nights });
+    var RL = { '인원': '인원 수', '가족': '가족 수', '박': '박 단위' };
+    var out = ['💰 ' + title + ' (' + range + ') 정산', '총 ' + won(res.total), ''];
+    res.groups.filter(function (g) { return g.total; }).forEach(function (g) {
+      out.push('· ' + g.name + ' ' + won(g.total) + ' (' + RL[g.rule] + (g.with.length ? ', ' + g.with.map(function (n) { return plabel(parties, n); }).join('·') + '만' : '') + ')');
+    });
+    out.push('');
     parties.forEach(function (p) {
-      out.push(p.icon + ' ' + p.label + (rule === '인원' ? '(' + p.people + '명)' : '') + ': 낸 돈 ' + won(res.paid[p.name]) + ' / 부담 ' + won(res.share[p.name]));
+      out.push(p.icon + ' ' + p.label + ': 낸 돈 ' + won(res.paid[p.name]) + ' / 부담 ' + won(res.share[p.name]));
     });
     out.push('', via === 'direct' ? '↔ 송금' : '🏠 ' + parties[0].label + josa(parties[0].label, '이', '가') + ' 모아서 정산');
     if (res.transfers.length) res.transfers.forEach(function (x) { out.push(plabel(parties, x.from) + ' → ' + plabel(parties, x.to) + ' ' + won(x.amount)); });
@@ -1841,9 +1847,9 @@
       var mine = items.filter(function (l) { return partyOf(l) === p.name; });
       if (mine.length) out.push('', '[' + p.label + '] ' + mine.map(function (l) { return (isDone(l) ? '✓' : '') + l.name + (R.num(l.qty, 1) > 1 ? '×' + l.qty : ''); }).join(', '));
     });
-    var res = R.settle(moneyLines(lines), parties, rule, via);
+    var res = R.settleItems(moneyLines(lines), parties, { rule: rule, via: via, nights: Math.max.apply(null, parties.map(function (p) { return Math.max.apply(null, (p.nights && p.nights.length) ? p.nights : [1]); })) });
     if (res.total) {
-      out.push('', '💰 정산 (' + (rule === '가족' ? '가족 수대로' : '인원 수대로') + ') 총 ' + won(res.total));
+      out.push('', '💰 정산 총 ' + won(res.total));
       res.transfers.forEach(function (x) { out.push(plabel(parties, x.from) + ' → ' + plabel(parties, x.to) + ' ' + won(x.amount)); });
     }
     return out.join('\n');
@@ -1947,10 +1953,11 @@
         S.mutate([{ t: 'lines', id: l.id, set: { amount: a, payer: a ? payer : '' } }]); close();
       } }, '저장')]);
   }
-  function costSheet(t, parties) {
-    var name = h('input', { type: 'text', placeholder: '예: 캠핑장 추가 이용료, 장작' });
-    var amt = amountInput(''), payer = '우리';
-    var close = U.sheet('비용 추가', [U.field('항목', name), U.field('금액', amt), U.field('누가 결제했나요?', payerPicker(parties, payer, function (v) { payer = v; }))], [
+  function costSheet(t, parties, defPayer) {
+    var name = h('input', { type: 'text', placeholder: '예: 숙박비, 장보기, 장작' });
+    var amt = amountInput(''), payer = defPayer || '우리';
+    var close = U.sheet(defPayer === '우리' ? '🏠 우리가 결제한 비용' : '비용 추가', [U.field('항목', name, '이름에 숙박·이용료가 있으면 박 단위, 장보기·먹거리면 인원 수로 자동으로 나눠요'), U.field('금액', amt, '영수증 여러 장이면 합계로 올려도 돼요'),
+      parties.length > 1 ? U.field('누가 결제했나요?', payerPicker(parties, payer, function (v) { payer = v; })) : null], [
       h('button.btn.primary.wide', { onclick: function () {
         var n = name.value.trim(), a = amt.value.replace(/[^\d]/g, '');
         if (!n || !a) { U.toast('항목과 금액을 입력하세요'); return; }
@@ -1960,36 +1967,48 @@
   }
 
   /**
-   * 정산 보드 (호스트·동행 가족 공용)
-   * o: { lines, parties, rule, via, isHost, me, onRule, onVia, onPeople(p), onRow(l), onAdd(), onShare(), onRemind() }
+   * 정산 보드 (호스트·동행 가족 공용) — 비용마다 나누는 방법(인원·가족·박)과 나눌 가족을 따로
+   * o: { lines, parties, rule, via, nights, start, isHost, me, onRule, onVia, onFamilies, onCost(g), onRow(l), onAdd, onAddOurs, onNoCost, onShare, onRemind }
    */
   function josa(w, a, b) { var c = String(w || '').charCodeAt(String(w || '').length - 1); return c >= 0xAC00 && c <= 0xD7A3 && (c - 0xAC00) % 28 ? a : b; }
   var NO_COST = '결제 없음';
+  var RULE_LABEL = { '인원': '👥 인원', '가족': '🏠 가족', '박': '🌙 박 단위' };
+  var OPEN_FAM = {};
+  function tripNights(start, end) { return Math.max(1, R.daysBetween(start, end)); }
+  function nightLabel(start, k) { return start ? U.md(R.addDays(start, k - 1)) + ' 밤' : k + '박째'; }
+  function settleOf(lines, parties, rule, via, nights) { return R.settleItems(moneyLines(lines), parties, { rule: rule, via: via, nights: nights }); }
   function settleBoard(o) {
-    var parties = o.parties, money = moneyLines(o.lines).filter(function (l) { return !(l.name === NO_COST && !R.num(l.amount, 0)); });
-    var res = R.settle(money, parties, o.rule, o.via);
-    var host = parties[0];
-    // 올림 = 금액을 올렸거나 "결제한 게 없어요"를 누른 가족
+    var parties = o.parties, res = settleOf(o.lines, parties, o.rule, o.via, o.nights);
+    var host = parties[0], meName = o.me || '우리';
     var noCost = {}; o.lines.forEach(function (l) { if (l.kind === '정산' && l.name === NO_COST && l.deleted !== 'Y' && l.addedBy) noCost[l.addedBy] = 1; });
     var done = function (p) { return p.name === host.name || res.paid[p.name] > 0 || noCost[p.name]; };
-    var paidN = parties.filter(done).length;
     var missing = parties.filter(function (p) { return !done(p); });
-    var people = parties.reduce(function (a, p) { return a + R.num(p.people, 0); }, 0);
-    var r10 = function (v) { return Math.round(v / 10) * 10; };
-    var unit = !res.total ? '' : o.rule === '인원' ? '1인당 약 ' + won(people ? r10(res.total / people) : 0) + ' (' + people + '명)' : '가족당 약 ' + won(r10(res.total / parties.length)) + ' (' + parties.length + '가족)';
-    function amt(v) { return Math.round(R.num(v, 0)).toLocaleString('ko-KR'); } // 표 안에서는 '원' 생략
+    function amt(v) { return Math.round(R.num(v, 0)).toLocaleString('ko-KR'); }
     function sign(v) { return v > 0 ? h('b.plus', '+' + amt(v)) : v < 0 ? h('b.minus', '−' + amt(-v)) : h('span.muted', '0'); }
-    var meName = o.me || '우리';
     var mine = res.transfers.filter(function (x) { return x.from === meName || x.to === meName; });
     var recv = res.transfers.filter(function (x) { return x.to === host.name; }), send = res.transfers.filter(function (x) { return x.from === host.name; });
-    var byPayer = {};
-    money.forEach(function (l) { var k = R.num(l.amount, 0) ? (l.payer || '?') : '__none'; (byPayer[k] = byPayer[k] || []).push(l); });
+    var multi = parties.length > 1;
+    // 쪼갠 원본 중 조각 합계가 원래 금액과 다른 것
+    var kids = {}; o.lines.forEach(function (l) { if (l.splitFrom && l.deleted !== 'Y') (kids[l.splitFrom] = kids[l.splitFrom] || []).push(l); });
+    var mismatch = o.lines.filter(function (l) { return kids[l.id] && l.deleted !== 'Y' && kids[l.id].reduce(function (a, k) { return a + R.num(k.amount, 0); }, 0) !== R.num(l.amount, 0); });
+    function groupRow(g) {
+      var who = g.with.length ? g.with.map(function (n) { return plabel(parties, n); }).join('·') + '만' : '전체';
+      var payers = g.payers.length ? g.payers.map(function (p) { return plabel(parties, p.payer) + ' ' + amt(p.amount); }).join(' + ') : '금액 미입력';
+      var split = g.lines[0].splitFrom ? '✂️ 나눈 조각 · ' : '';
+      return h('div.costrow', { onclick: function () {
+        if (o.isHost) o.onCost(g);
+        else { var own = g.lines.filter(function (l) { return l.payer === meName || (!l.payer && l.addedBy === meName); })[0]; if (own && o.onRow) o.onRow(own); else U.toast(g.name + ': ' + RULE_LABEL[g.rule] + ' · ' + who); }
+      } },
+        h('div.kv', h('b', g.name), h('span', g.total ? amt(g.total) : '')),
+        h('div.kv', h('small', split + payers), h('span.rbadge' + (g.rule === '박' ? '.night' : ''), RULE_LABEL[g.rule])),
+        multi && g.with.length ? h('small.muted', '나눠 내는 가족: ' + who) : null);
+    }
+    var groups = res.groups.slice().sort(function (a, b) { return (b.total ? 1 : 0) - (a.total ? 1 : 0); });
     return h('div.settle2',
-      // 1) 합계
       h('div.card.settotal',
         h('small', '총 비용'), h('div.big', won(res.total)),
-        parties.length > 1 ? h('small', paidN + '/' + parties.length + ' 가족 결제 금액 확인' + (unit ? ' · ' + unit : '')) : h('small', '이번 캠핑에 쓴 비용 합계예요'),
-        missing.length ? h('p.missing', '⏳ 아직 안 올림: ' + missing.map(function (p) { return p.icon + ' ' + p.label; }).join(', ')) : null,
+        multi ? h('small', parties.filter(done).length + '/' + parties.length + ' 가족 결제 금액 확인') : h('small', '이번 캠핑에 쓴 비용 합계예요'),
+        multi && missing.length ? h('p.missing', '⏳ 아직 안 올림: ' + missing.map(function (p) { return p.icon + ' ' + p.label; }).join(', ')) : null,
         !o.isHost && missing.some(function (p) { return p.name === meName; }) ? h('div.mine',
           h('b', '먼저 우리가 결제한 금액을 올려 주세요'), h('small', '모든 가족이 올리면 보낼·받을 돈이 정해져요'),
           h('div.row2', o.onAdd ? h('button.btn.small.primary', { onclick: o.onAdd }, '+ 결제 금액 올리기') : null,
@@ -1997,98 +2016,228 @@
         !o.isHost && res.total && mine.length ? h('p.mine', (missing.length ? '(지금 기준) ' : '') + mine.map(function (x) {
           return x.from === meName ? '💸 ' + plabel(parties, x.to) + '에게 ' + won(x.amount) + ' 보내면 돼요' : '💰 ' + plabel(parties, x.from) + '에게서 ' + won(x.amount) + ' 받아요';
         }).join(' · ')) : null),
-      parties.length > 1 && res.total && o.isHost && o.rule === '인원' && o.peopleUnset ? h('div.card.warnbox', { onclick: function () { o.onPeople(host); } },
-        h('b', '👥 ' + host.label + ' 인원이 ' + host.people + '명으로 잡혀 있어요'),
-        h('small.hint', '인원 수대로 나눌 때 중요해요. 눌러서 이번 캠핑에 간 인원(아이 포함)으로 맞춰 주세요.')) : null,
-      // 2) 나누는 방법 (함께 간 가족이 있을 때만)
-      parties.length < 2 ? null : h('div.card',
-        h('small.lbl', '나누는 방법'),
-        o.isHost ? U.seg([{ value: '인원', label: '👥 인원 수대로' }, { value: '가족', label: '🏠 가족 수대로' }], o.rule, o.onRule)
-          : h('p', o.rule === '인원' ? '👥 인원 수대로 나눠요' : '🏠 가족 수대로 똑같이 나눠요 (인원 무관)'),
-        h('small.hint', o.rule === '인원' ? '가족 인원에 비례해서 나눠요.' + (o.isHost ? ' 인원이 틀리면 아래 가족 이름을 눌러 고치세요.' : '') : '인원과 상관없이 가족마다 같은 금액을 내요.'),
+      o.isHost && o.onAddOurs ? h('button.btn.primary.wide', { onclick: o.onAddOurs }, '🏠 우리가 결제한 비용 올리기') : null,
+      !o.isHost && o.onAdd ? h('button.btn.wide', { onclick: o.onAdd }, '+ 우리가 결제한 비용 올리기') : null,
+      o.isHost && multi ? h('button.card.famsum', { onclick: o.onFamilies },
+        h('div.kv', h('b', '👥 가족별 인원·묵은 밤'), h('span', '›')),
+        h('small', parties.map(function (p) { return p.label + ' ' + p.people + '명' + (p.nights.length < o.nights ? ' ' + p.nights.length + '박' : ''); }).join(' · '))) : null,
+      // 비용 내역
+      h('div.card',
+        h('div.kv', h('h3', '🧾 비용 내역'), h('small', groups.length + '건')),
+        o.isHost ? h('small.hint', '눌러서 나누는 방법·나눌 가족을 정하거나, 나누기·묶음 풀기를 해요. 같은 이름의 비용은 자동으로 묶여요.') : h('small.hint', '나누는 방법은 ' + host.label + josa(host.label, '이', '가') + ' 정해요. 우리가 낸 비용은 눌러서 고칠 수 있어요.'),
+        mismatch.length ? h('p.missing', '⚠️ ' + mismatch.map(function (l) { return l.name; }).join(', ') + ': 나눈 조각 합계가 원래 금액과 달라요. 조각을 다시 확인해 주세요.') : null,
+        groups.length ? groups.map(groupRow) : h('p.muted', '아직 비용이 없어요. 결제한 금액을 올리면 자동으로 나눠요.')),
+      // 기본 방법·송금
+      multi ? h('div.card',
+        h('small.lbl', '기본 나누는 방법 (따로 정하지 않은 비용)'),
+        o.isHost ? U.seg([{ value: '인원', label: '👥 인원 수' }, { value: '가족', label: '🏠 가족 수' }], o.rule, o.onRule)
+          : h('p', o.rule === '인원' ? '👥 인원 수' : '🏠 가족 수'),
+        h('small.hint', '숙박·사이트·캠핑장·이용료 → 🌙 박 단위, 장보기·먹거리 → 👥 인원으로 자동 추천돼요.'),
         h('small.lbl', '송금 방법'),
         o.isHost ? U.seg([{ value: 'hub', label: '🏠 우리가 모아서 정산' }, { value: 'direct', label: '↔ 가족끼리 바로' }], o.via, o.onVia)
-          : h('p', o.via === 'direct' ? '↔ 가족끼리 바로 주고받아요' : '🏠 ' + host.label + josa(host.label, '이', '가') + ' 모아서 정산해요'),
-        h('small.hint', o.via === 'direct' ? '송금 횟수가 가장 적게 되도록 가족끼리 주고받아요.' : '모든 가족이 ' + host.label + '하고만 주고받아요.')),
-      // 3) 가족별 표 (비용이 생긴 뒤)
-      parties.length < 2 || !res.total ? null : h('div.card',
+          : h('p', o.via === 'direct' ? '↔ 가족끼리 바로 주고받아요' : '🏠 ' + host.label + josa(host.label, '이', '가') + ' 모아서 정산해요')) : null,
+      // 가족별 표 (누르면 부담 내역)
+      multi && res.total ? h('div.card',
         h('div.ftable-head', h('span', '가족'), h('span', '낸 돈'), h('span', '부담'), h('span', '차액 (원)')),
         parties.map(function (p) {
-          var me = p.name === meName;
-          return h('div.frow' + p.cls + (me ? '.me' : ''), { onclick: o.isHost && o.onPeople ? function () { o.onPeople(p); } : null },
-            h('span.fname', p.icon + ' ' + p.label, h('small', o.rule === '인원' ? p.people + '명' + (o.isHost ? ' ✎' : '') : '')),
+          var open = !!OPEN_FAM[p.name], br = res.breakdown[p.name] || [];
+          return [h('div.frow' + p.cls + (p.name === meName ? '.me' : ''), { onclick: function () { OPEN_FAM[p.name] = !open; rerender(); } },
+            h('span.fname', p.icon + ' ' + p.label, h('small', (open ? '▾ ' : '▸ ') + '부담 내역')),
             h('span', res.paid[p.name] ? amt(res.paid[p.name]) : h('span.muted', p.name === host.name || noCost[p.name] ? '0' : '안 올림')),
             h('span', amt(res.share[p.name] || 0)),
-            h('span', sign(res.balance[p.name] || 0)));
+            h('span', sign(res.balance[p.name] || 0))),
+            open ? h('div.breakdown', br.length ? br.map(function (b) { return h('div.kv', h('small', b.name + ' · ' + RULE_LABEL[b.rule]), h('small', amt(b.amount))); }) : h('small.muted', '부담하는 비용이 없어요'),
+              h('div.kv', h('b', '부담 합계'), h('b', amt(res.share[p.name] || 0)))) : null];
         }),
-        h('small.hint', '차액 + 는 받을 돈, − 는 보낼 돈이에요.')),
-      // 4) 송금
-      res.total && parties.length > 1 ? h('div.card',
+        h('small.hint', '차액 + 는 받을 돈, − 는 보낼 돈이에요. 가족을 누르면 어떤 비용을 얼마씩 내는지 보여요.')) : null,
+      multi && res.total ? h('div.card',
         h('h3', '💸 송금'),
         o.via !== 'direct' && o.isHost ? h('p.hint', '받을 돈 ' + won(recv.reduce(function (a, x) { return a + x.amount; }, 0)) + ' · 보낼 돈 ' + won(send.reduce(function (a, x) { return a + x.amount; }, 0))) : null,
         res.transfers.length ? res.transfers.map(function (x) {
           var hl = x.from === meName || x.to === meName;
           return h('div.transfer' + (hl ? '.hl' : ''), plabel(parties, x.from) + ' → ' + plabel(parties, x.to) + '  ', h('b', won(x.amount)));
         }) : h('p.muted', '주고받을 돈이 없어요')) : null,
-      // 5) 비용 내역
-      h('details.card.costs', { open: money.length <= 6 },
-        h('summary', '🧾 비용 내역 ', h('small', money.length + '건')),
-        Object.keys(byPayer).map(function (k) {
-          var ls = byPayer[k], sum = ls.reduce(function (a, l) { return a + R.num(l.amount, 0); }, 0);
-          var p = parties.filter(function (x) { return x.name === k; })[0];
-          return h('div.payer',
-            h('div.kv', h('b', k === '__none' ? '💭 금액 미입력' : (p ? p.icon + ' ' + p.label : k) + ' 결제'), k === '__none' ? null : h('span', won(sum))),
-            ls.map(function (l) {
-              return h('div.mrow', { onclick: o.onRow ? function () { o.onRow(l); } : null },
-                h('span', l.name), R.num(l.amount, 0) ? h('span', won(l.amount)) : h('span.muted', '금액 입력 ›'));
-            }));
-        }),
-        !money.length ? h('p.muted', '아직 비용이 없어요. 결제한 금액을 올리면 자동으로 나눠요.') : null),
-      o.onAdd ? h('button.btn.wide', { onclick: o.onAdd }, !o.isHost ? '+ 우리가 결제한 비용 올리기' : parties.length > 1 ? '+ 비용 추가 (누가 결제했는지 선택)' : '+ 비용 추가') : null,
-      o.onShare && parties.length > 1 && res.total ? h('button.btn.wide', { onclick: o.onShare }, '📋 정산 결과 카톡용 복사') : null,
-      o.onRemind && missing.length && parties.length > 1 ? h('button.btn.wide', { onclick: function () { o.onRemind(missing); } }, '🔔 아직 안 올린 가족에게 보낼 문구 복사') : null);
+      o.onShare && multi && res.total ? h('button.btn.wide', { onclick: o.onShare }, '📋 정산 결과 카톡용 복사') : null,
+      o.onRemind && missing.length && multi ? h('button.btn.wide', { onclick: function () { o.onRemind(missing); } }, '🔔 아직 안 올린 가족에게 보낼 문구 복사') : null);
   }
   /** 호스트 정산 화면 (정산 탭·#/trip/:id/settle) */
   function settlePanel(t, lines) {
-    var parties = partyList(t), rule = t.splitRule || '인원', via = t.settleVia || 'hub';
+    var parties = partyList(t), rule = t.splitRule || '인원', via = t.settleVia || 'hub', N = tripNights(t.start, t.end);
     return settleBoard({
-      lines: lines, parties: parties, rule: rule, via: via, isHost: true, me: '우리', peopleUnset: !(R.num(t.ourPeople, 0) > 0),
+      lines: lines, parties: parties, rule: rule, via: via, nights: N, start: t.start, isHost: true, me: '우리',
       onRule: function (v) { S.mutate([{ t: 'trips', id: t.id, set: { splitRule: v } }]); },
       onVia: function (v) { S.mutate([{ t: 'trips', id: t.id, set: { settleVia: v } }]); },
-      onPeople: function (p) { peopleSheet(t, p); },
-      onRow: function (l) { amountSheet(l, parties); },
-      onAdd: function () { costSheet(t, parties); },
-      onShare: function () { shareOut(t.title + ' 정산', null, settleText(t.title, U.range(t.start, t.end), lines, parties, rule, via)); },
+      onFamilies: function () { familiesSheet(t); },
+      onCost: function (g) { costEditSheet(t, g); },
+      onAddOurs: function () { costSheet(t, parties, '우리'); },
+      onShare: function () { shareOut(t.title + ' 정산', null, settleText(t.title, U.range(t.start, t.end), lines, parties, rule, via, N)); },
       onRemind: function (missing) {
         shareOut(t.title + ' 정산', null, '🏕️ ' + t.title + ' 정산 중이에요!\n' + missing.map(function (p) { return p.label; }).join(', ') +
           ' — 각자 받은 전용 링크의 "💰 정산"에서 결제한 금액을 올려 주세요. 결제한 게 없으면 "결제한 게 없어요"를 눌러 주세요.');
       },
     });
   }
-  /** 정산 인원 고치기: 우리 가족은 이번 캠핑 정산 인원, 동행 가족은 어른·아이 */
-  function peopleSheet(t, p) {
-    if (p.name === '우리') {
-      var n = R.num(p.people, 1), box = h('div');
-      var draw = function () { box.innerHTML = ''; box.appendChild(U.stepper(n, function (v) { n = v; draw(); }, 1)); };
-      draw();
-      var close = U.sheet('🏠 ' + p.label + ' 정산 인원', [U.field('인원', box, '이번 캠핑 정산에만 쓰여요. 구성원 등록과는 별개예요.')],
-        [h('button.btn.primary.wide', { onclick: function () { S.mutate([{ t: 'trips', id: t.id, set: { ourPeople: String(n) } }]); close(); } }, '저장')]);
-      return;
+  function nightChips(start, N, sel, onChange) {
+    var box = h('div');
+    function draw() {
+      box.innerHTML = '';
+      var opts = []; for (var k = 1; k <= N; k++) opts.push({ value: k, label: nightLabel(start, k) });
+      box.appendChild(U.chips(opts, sel, function (v) { var i = sel.indexOf(v); if (i >= 0) { if (sel.length > 1) sel.splice(i, 1); } else sel.push(v); sel.sort(); onChange(sel); draw(); }));
     }
-    var comps = R.parseCompanions(t.companions), c = comps.filter(function (x) { return x.name === p.name; })[0];
-    if (!c) return;
-    var ad = R.num(c.adults, 0), kd = R.num(c.kids, 0), aBox = h('div'), kBox = h('div');
-    var redraw = function () {
-      aBox.innerHTML = ''; aBox.appendChild(U.stepper(ad, function (v) { ad = v; redraw(); }, 0));
-      kBox.innerHTML = ''; kBox.appendChild(U.stepper(kd, function (v) { kd = v; redraw(); }, 0));
-    };
-    redraw();
-    var close2 = U.sheet(p.icon + ' ' + p.label + ' 인원', [U.field('어른', aBox), U.field('아이', kBox)],
-      [h('button.btn.primary.wide', { onclick: function () {
-        // 링크 코드는 서버가 지키므로 동행 목록을 그대로 저장해도 안전
-        S.mutate([{ t: 'trips', id: t.id, set: { companions: JSON.stringify(comps.map(function (x) { return x.name === c.name ? Object.assign({}, x, { adults: ad, kids: kd }) : x; })) } }]);
-        close2();
+    draw();
+    return box;
+  }
+  /** 가족별 인원·묵은 밤 (박 단위 비용에 쓰임) */
+  function familiesSheet(t) {
+    var N = tripNights(t.start, t.end), parties = partyList(t), comps = R.parseCompanions(t.companions);
+    var ourN = R.num(parties[0].people, 1), ourNights = parties[0].nights.slice();
+    var C = comps.map(function (c) { return { c: c, ad: R.num(c.adults, 0), kd: R.num(c.kids, 0), nights: R.nightsOf(c.nights, N) }; });
+    function stepBox(v, min, on) { var b = h('div'); var d = function () { b.innerHTML = ''; b.appendChild(U.stepper(v, function (x) { v = x; on(x); d(); }, min)); }; d(); return b; }
+    var close = U.sheet('👥 가족별 인원·묵은 밤', [
+      h('small.hint', '인원은 👥 인원 수로 나누는 비용에, 묵은 밤은 🌙 박 단위 비용(숙박비 등)에 쓰여요. 기본은 모든 밤이에요.'),
+      h('div.famedit', h('b', '🏠 ' + parties[0].label), h('div.kv', h('span', '인원'), stepBox(ourN, 1, function (x) { ourN = x; })),
+        N > 1 ? nightChips(t.start, N, ourNights, function () {}) : null),
+      C.map(function (x) {
+        return h('div.famedit', h('b', famIcon(comps, x.c.name) + ' ' + x.c.name),
+          h('div.kv', h('span', '어른'), stepBox(x.ad, 0, function (v) { x.ad = v; })),
+          h('div.kv', h('span', '아이'), stepBox(x.kd, 0, function (v) { x.kd = v; })),
+          N > 1 ? nightChips(t.start, N, x.nights, function () {}) : null);
+      }),
+    ], [h('button.btn.primary.wide', { onclick: function () {
+      var all = function (a) { return a.length >= N ? '' : a.join(','); };
+      S.mutate([{ t: 'trips', id: t.id, set: {
+        ourPeople: String(ourN), ourNights: all(ourNights),
+        companions: JSON.stringify(C.map(function (x) { return Object.assign({}, x.c, { adults: x.ad, kids: x.kd, nights: x.nights.length >= N ? [] : x.nights }); })),
+      } }]);
+      close(); U.toast('저장했어요');
+    } }, '저장')]);
+  }
+  /** 비용 편집: 이름·결제(여러 가족)·나누는 방법·나눌 가족 + 나누기·묶음 풀기·삭제 */
+  function costEditSheet(t, g) {
+    var parties = partyList(t), N = tripNights(t.start, t.end);
+    var rule = g.rule, withSel = g.with.length ? g.with.slice() : parties.map(function (p) { return p.name; });
+    var name = h('input', { type: 'text', value: g.name });
+    var rows = g.lines.map(function (l) { return { l: l, payer: l.payer || '우리', amt: amountInput(l.amount), del: false }; });
+    var payBox = h('div'), prev = h('div.calc'), ruleBox = h('div'), withBox = h('div');
+    function drawPay() {
+      payBox.innerHTML = '';
+      rows.forEach(function (r) {
+        if (r.del) return;
+        payBox.appendChild(h('div.payrow', payerPicker(parties, r.payer, function (v) { r.payer = v; drawPrev(); }),
+          h('div.kv', r.amt, rows.filter(function (x) { return !x.del; }).length > 1 ? h('button.icon', { 'aria-label': '이 결제 빼기', onclick: function () { r.del = true; drawPay(); drawPrev(); } }, '✕') : null)));
+        r.amt.oninput = (function (old) { return function (e) { old && old(e); drawPrev(); }; })(r.amt.oninput);
+      });
+      payBox.appendChild(h('button.btn.small', { onclick: function () { rows.push({ l: null, payer: '우리', amt: amountInput(''), del: false }); drawPay(); } }, '+ 결제자 추가 (나눠 냈을 때)'));
+    }
+    function cur() {
+      return rows.filter(function (r) { return !r.del; }).map(function (r) { return { id: r.l ? r.l.id : 'new', kind: '정산', name: 'x', amount: r.amt.value.replace(/[^\d]/g, ''), payer: r.payer, splitRule: rule, splitWith: withSel.length === parties.length ? '' : withSel.join(','), costGroup: 'preview' }; });
+    }
+    function drawPrev() {
+      var r = R.settleItems(cur(), parties, { rule: rule, nights: N }), gg = r.groups[0];
+      prev.innerHTML = '';
+      if (!gg || !gg.total) { prev.appendChild(h('small', '금액을 넣으면 가족별 부담이 보여요')); return; }
+      if (rule === '박') {
+        for (var k = 1; k <= N; k++) {
+          var stay = withSel.filter(function (n) { var p = parties.filter(function (x) { return x.name === n; })[0]; return p && p.nights.indexOf(k) >= 0; });
+          prev.appendChild(h('div', nightLabel(t.start, k) + ' ' + won(gg.total / N) + ' ÷ ' + (stay.length || withSel.length) + '가족'));
+        }
+      }
+      prev.appendChild(h('div', Object.keys(gg.per).map(function (n) { return plabel(parties, n) + ' ' + won(gg.per[n]); }).join(' · ')));
+    }
+    function drawRule() {
+      ruleBox.innerHTML = '';
+      ruleBox.appendChild(U.seg([{ value: '인원', label: '👥 인원 수' }, { value: '가족', label: '🏠 가족 수' }, { value: '박', label: '🌙 박 단위' }], rule, function (v) { rule = v; drawRule(); drawPrev(); }));
+      if (rule === '박') ruleBox.appendChild(h('small.hint', '박마다 그날 묵은 가족 수로 나눠요. 묵은 밤은 "가족별 인원·묵은 밤"에서 정해요.'));
+    }
+    function drawWith() {
+      withBox.innerHTML = '';
+      withBox.appendChild(U.chips(parties.map(function (p) { return { value: p.name, label: p.icon + ' ' + p.label }; }), withSel, function (v) {
+        var i = withSel.indexOf(v); if (i >= 0) { if (withSel.length > 1) withSel.splice(i, 1); } else withSel.push(v); drawWith(); drawPrev();
+      }));
+    }
+    drawPay(); drawRule(); drawWith(); drawPrev();
+    var isKid = !!g.lines[0].splitFrom, single = g.lines.length === 1;
+    var close = U.sheet(g.name + ' · ' + won(g.total), [
+      U.field('이름', name, g.lines.length > 1 ? '묶인 비용 ' + g.lines.length + '개의 이름이 함께 바뀌어요' : ''),
+      U.field('결제', payBox),
+      U.field('나누는 방법', ruleBox),
+      parties.length > 1 ? U.field('누가 나눠 내나', withBox) : null,
+      prev,
+      h('div.row2',
+        single && !isKid && g.total ? h('button.btn.small', { onclick: function () { close(); splitSheet(t, g); } }, '✂️ 나누기') : null,
+        !single ? h('button.btn.small', { onclick: function () {
+          S.mutate(g.lines.map(function (l) { return { t: 'lines', id: l.id, set: { costGroup: 'solo:' + l.id } }; })); close(); U.toast('묶음을 풀었어요');
+        } }, '묶음 풀기') : null,
+        // 묶음을 풀었던 비용: 같은 이름끼리 다시 묶기
+        single && g.lines[0].costGroup && g.lines[0].costGroup.indexOf('solo:') === 0 && S.linesOf(t.id).some(function (l) { return l.id !== g.lines[0].id && l.deleted !== 'Y' && R.costKey(Object.assign({}, l, { costGroup: '' })) === R.costKey(Object.assign({}, g.lines[0], { costGroup: '' })); }) ?
+          h('button.btn.small', { onclick: function () {
+            var k = R.costKey(Object.assign({}, g.lines[0], { costGroup: '' }));
+            S.mutate(S.linesOf(t.id).filter(function (l) { return l.deleted !== 'Y' && /^solo:/.test(l.costGroup || '') && R.costKey(Object.assign({}, l, { costGroup: '' })) === k; })
+              .map(function (l) { return { t: 'lines', id: l.id, set: { costGroup: '' } }; }));
+            close(); U.toast('같은 이름끼리 다시 묶었어요');
+          } }, '🔗 같은 이름끼리 다시 묶기') : null,
+        isKid ? h('button.btn.small', { onclick: function () {
+          var pid = g.lines[0].splitFrom;
+          S.mutate(S.linesOf(t.id).filter(function (l) { return l.splitFrom === pid && l.deleted !== 'Y'; }).map(function (l) { return { t: 'lines', id: l.id, set: { deleted: 'Y' } }; }));
+          close(); U.toast('나누기를 취소하고 원래 한 줄로 되돌렸어요');
+        } }, '↩️ 나누기 취소') : null),
+    ], [
+      h('button.btn.danger', { onclick: function () {
+        U.ask(g.name + ' 삭제', '이 비용을 정산에서 빼요.', '삭제', function () {
+          S.mutate(g.lines.map(function (l) { return { t: 'lines', id: l.id, set: l.kind === '장보기' ? { amount: '', payer: '' } : { deleted: 'Y' } }; })); close();
+        }, true);
+      } }, '삭제'),
+      h('button.btn.primary', { onclick: function () {
+        var nm = name.value.trim() || g.name, sw = withSel.length === parties.length ? '' : withSel.join(','), ops = [];
+        var explicit = g.key.indexOf('name:') !== 0 ? g.key : '';
+        rows.forEach(function (r) {
+          var a = r.amt.value.replace(/[^\d]/g, '');
+          if (r.l && r.del) { ops.push({ t: 'lines', id: r.l.id, set: r.l.kind === '장보기' ? { amount: '', payer: '' } : { deleted: 'Y' } }); return; }
+          if (r.del) return;
+          var set = { amount: a, payer: a ? r.payer : '', splitRule: rule, splitWith: sw };
+          if (r.l) { if (r.l.kind !== '장보기' || nm !== g.name) set.name = nm; ops.push({ t: 'lines', id: r.l.id, set: set }); }
+          else if (a) ops.push({ t: 'lines', id: S.uid('L'), set: Object.assign(lineSet(t.id, { kind: '정산', itemId: S.uid('T'), name: nm, category: '정산', qty: 1, source: '정산', shared: 'Y' }), set, { costGroup: explicit }) });
+        });
+        S.mutate(ops); close();
       } }, '저장')]);
+  }
+  /** ✂️ 나누기: 조각마다 이름·금액·나눌 가족 (결제자는 그대로) */
+  function splitSheet(t, g) {
+    var src = g.lines[0], parties = partyList(t), N = tripNights(t.start, t.end), total = g.total;
+    var n0 = N > 1 ? N : 2, parts = [];
+    for (var i = 1; i <= n0; i++) parts.push({ name: g.name + (N > 1 ? ' ' + i + '박째' : ' ' + i), amt: amountInput(String(i < n0 ? Math.round(total / n0 / 10) * 10 : total - Math.round(total / n0 / 10) * 10 * (n0 - 1))), with: parties.map(function (p) { return p.name; }) });
+    var box = h('div'), sum = h('b');
+    function draw() {
+      box.innerHTML = '';
+      parts.forEach(function (p, i) {
+        var nm = h('input', { type: 'text', value: p.name, oninput: function (e) { p.name = e.target.value; } });
+        p.amt.oninput = function (e) { var d = e.target.value.replace(/[^\d]/g, ''); e.target.value = d ? Number(d).toLocaleString('ko-KR') : ''; drawSum(); };
+        var wb = h('div');
+        var dw = function () { wb.innerHTML = ''; wb.appendChild(U.chips(parties.map(function (x) { return { value: x.name, label: x.label }; }), p.with, function (v) {
+          var j = p.with.indexOf(v); if (j >= 0) { if (p.with.length > 1) p.with.splice(j, 1); } else p.with.push(v); dw(); })); };
+        dw();
+        box.appendChild(h('div.card.part', h('div.kv', nm, p.amt, parts.length > 2 ? h('button.icon', { onclick: function () { parts.splice(i, 1); draw(); drawSum(); } }, '✕') : null), wb));
+      });
+    }
+    function drawSum() {
+      var s = parts.reduce(function (a, p) { return a + R.num(p.amt.value.replace(/[^\d]/g, ''), 0); }, 0);
+      sum.textContent = '나눈 합계 ' + won(s) + (s === total ? ' ✓' : ' (원래 ' + won(total) + ')');
+      sum.className = s === total ? '' : 'minus';
+    }
+    draw(); drawSum();
+    var close = U.sheet('✂️ ' + g.name + ' 나누기', [
+      h('small.hint', '조각마다 금액과 나눠 낼 가족을 정해요. 결제한 가족(' + plabel(parties, src.payer) + ')은 그대로예요. 나누는 방법: ' + RULE_LABEL[g.rule]),
+      box, h('button.btn.small', { onclick: function () { parts.push({ name: g.name + ' ' + (parts.length + 1), amt: amountInput(''), with: parties.map(function (p) { return p.name; }) }); draw(); drawSum(); } }, '+ 조각 추가'),
+      h('div.kv', h('span'), sum),
+    ], [h('button.btn.primary.wide', { onclick: function () {
+      var s = parts.reduce(function (a, p) { return a + R.num(p.amt.value.replace(/[^\d]/g, ''), 0); }, 0);
+      if (s !== total) { U.toast('조각 합계를 원래 금액(' + won(total) + ')과 맞춰 주세요'); return; }
+      S.mutate(parts.map(function (p) {
+        return { t: 'lines', id: S.uid('L'), set: lineSet(t.id, { kind: '정산', itemId: S.uid('T'), name: p.name.trim() || g.name, category: '정산', qty: 1, source: '정산', shared: 'Y',
+          amount: p.amt.value.replace(/[^\d]/g, ''), payer: src.payer }) };
+      }).map(function (op, i) { op.set.splitFrom = src.id; op.set.splitRule = g.rule; op.set.splitWith = parts[i].with.length === parties.length ? '' : parts[i].with.join(','); return op; }));
+      close(); U.toast(g.name + '을(를) ' + parts.length + '개로 나눴어요');
+    } }, '나누기')]);
   }
 
   /* ───────── 설정: 가족 로그인 ───────── */
@@ -2232,7 +2381,8 @@
       h('div.list', comps.map(function (c) {
         return h('button.whobtn', { onclick: function () { try { localStorage.setItem('cp.gf.' + token, c.name); } catch (e) {} rerender(); } }, h('span', famIcon(comps, c.name)), c.name);
       })));
-    var parties = partiesOf(d.ourName, d.ourPeople, comps), myIcon = famIcon(comps, fam);
+    var gN = Math.max(1, R.daysBetween(d.trip.start, d.trip.end));
+    var parties = partiesOf(d.ourName, d.ourPeople, comps, d.trip.ourNights, gN), myIcon = famIcon(comps, fam);
     var items = d.lines.filter(function (l) { return l.kind !== '정산' && l.kind !== '메뉴' && l.deleted !== 'Y'; });
     var und = items.filter(function (l) { return l.party === '미정'; });
     var mine = items.filter(function (l) { return l.party === fam; });
@@ -2263,7 +2413,7 @@
     var settleSec = [
       h('h2.sec', '💰 정산'),
       settleBoard({
-        lines: d.lines, parties: parties, rule: d.trip.splitRule || '인원', via: d.trip.settleVia || 'hub', isHost: false, me: fam,
+        lines: d.lines, parties: parties, rule: d.trip.splitRule || '인원', via: d.trip.settleVia || 'hub', nights: gN, start: d.trip.start, isHost: false, me: fam,
         onRow: gAmount,
         onAdd: function () {
           var name = h('input', { type: 'text', placeholder: '예: 장보기, 장작, 캠핑장 이용료' }), amt = amountInput('');
@@ -2277,7 +2427,7 @@
           if (d.lines.some(function (l) { return l.kind === '정산' && l.name === NO_COST && l.addedBy === fam && l.deleted !== 'Y'; })) return;
           guestSend([{ t: 'lines', id: newId(), set: { kind: '정산', name: NO_COST } }]); U.toast('결제 없음으로 표시했어요');
         },
-        onShare: function () { shareOut(d.trip.title + ' 정산', null, settleText(d.trip.title, U.range(d.trip.start, d.trip.end), d.lines, parties, d.trip.splitRule || '인원', d.trip.settleVia || 'hub')); },
+        onShare: function () { shareOut(d.trip.title + ' 정산', null, settleText(d.trip.title, U.range(d.trip.start, d.trip.end), d.lines, parties, d.trip.splitRule || '인원', d.trip.settleVia || 'hub', gN)); },
       })];
     return h('div.page', header,
       G.err ? h('p.err', G.err) : null,
