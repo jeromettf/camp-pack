@@ -27,7 +27,8 @@ var SCHEMA = {
     ['members', '참여구성원'], ['guestAdults', '손님어른'], ['guestKids', '손님아이'], ['tagsAdd', '추가태그'],
     ['tagsRemove', '제외태그'], ['tags', '적용태그'], ['weather', '날씨'], ['status', '상태'], ['rating', '별점'],
     ['memo', '메모'], ['reviewed', '회고완료'], ['createdBy', '생성자'], ['createdAt', '생성일'], ['updatedAt', '수정일'],
-    ['companions', '동행'], ['shareToken', '공유코드'], ['shareUntil', '공유만료'], ['splitRule', '정산방식'], ['settleVia', '송금방식'], ['ourPeople', '우리인원'], ['ourNights', '우리박']] },
+    ['companions', '동행'], ['shareToken', '공유코드'], ['shareUntil', '공유만료'], ['splitRule', '정산방식'], ['settleVia', '송금방식'], ['ourPeople', '우리인원'], ['ourNights', '우리박'],
+    ['settleDone', '송금확인'], ['settleSent', '보냄표시'], ['settleLock', '정산확정']] },
   lines: { sheet: '체크', cols: [
     ['id', 'id'], ['tripId', '캠핑id'], ['kind', '종류'], ['itemId', '항목id'], ['name', '이름'], ['category', '카테고리'],
     ['box', '수납함'], ['qty', '수량'], ['owner', '담당자'], ['leave', '두고오기쉬움'], ['warn', '주의'], ['note', '메모'],
@@ -90,6 +91,7 @@ function doPost(e) {
       case 'login': return json_(login_(req.family, req.pin));
       case 'shareGet': return json_(shareGet_(req.s));
       case 'shareMutate': return json_(shareMutate_(req.s, String(req.by || ''), req.ops || []));
+      case 'shareSent': return json_(shareSent_(req.s, String(req.key || ''), !!req.on, Number(req.amount) || 0));
     }
   } catch (err) {
     return json_({ ok: false, code: 'server', error: String(err && err.message || err) });
@@ -335,7 +337,9 @@ function shareGet_(token) {
   });
   var comps = parseComps_(t).map(function (c) { return { name: c.name, adults: c.adults, kids: c.kids, nights: c.nights || [] }; }); // 다른 가족 링크 코드는 숨김
   return { ok: true, version: version_(), ourName: props_().getProperty('FAMILY_NAME') || '우리 가족', ourPeople: people, fam: t._fam,
-    trip: { title: t.title, start: t.start, end: t.end, place: place ? place.name : '', companions: JSON.stringify(comps), splitRule: t.splitRule, settleVia: t.settleVia || 'hub', ourNights: t.ourNights || '' },
+    trip: { title: t.title, start: t.start, end: t.end, place: place ? place.name : '', companions: JSON.stringify(comps), splitRule: t.splitRule, settleVia: t.settleVia || 'hub', ourNights: t.ourNights || '',
+      settleDone: t.settleDone || '', settleSent: t.settleSent || '', settleLock: t.settleLock || '' },
+    account: settleAccount_(),
     lines: lines };
 }
 
@@ -402,6 +406,26 @@ function shareMutateLocked_(token, by, ops) {
   var r = safe.length ? mutate_(safe, by + '(동행)', true) : { ok: true, applied: 0, version: version_() };
   r.rejected = rejected;
   return r;
+}
+/** 정산 받을 계좌 (설정 '정산계좌' JSON) — 가족별 전용 링크에만 */
+function settleAccount_() {
+  var row = readTable_('settings').filter(function (x) { return x.key === '정산계좌'; })[0];
+  if (!row || !row.value) return null;
+  try { var a = JSON.parse(row.value); return a && a.number ? { bank: String(a.bank || ''), number: String(a.number), holder: String(a.holder || '') } : null; } catch (e) { return null; }
+}
+/** 동행 가족 "보냈어요" 표시: 자기 가족이 보내는 송금(키 '가족>받는이')만 */
+function shareSent_(token, key, on, amount) {
+  var t = shareTrip_(token);
+  if (!t || !t._fam) return { ok: false, code: 'share_invalid', error: '가족별 전용 링크에서만 할 수 있어요' };
+  if (key.indexOf(t._fam + '>') !== 0) return { ok: false, code: 'bad_request', error: '우리 가족 송금만 표시할 수 있어요' };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try {
+    var cur = readTable_('trips').filter(function (x) { return x.id === t.id; })[0] || {};
+    var m = {}; try { m = JSON.parse(cur.settleSent || '{}') || {}; } catch (e) { m = {}; }
+    if (on) m[key] = { at: nowStr_(), amount: amount }; else delete m[key];
+    return mutate_([{ t: 'trips', id: t.id, set: { settleSent: JSON.stringify(m) } }], t._fam + '(동행)', true);
+  } finally { lock.releaseLock(); }
 }
 function cleanAmount_(v) { var n = Math.round(Number(String(v == null ? '' : v).replace(/[^\d.-]/g, ''))); return n > 0 ? String(n) : ''; }
 

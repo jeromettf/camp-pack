@@ -495,12 +495,17 @@
     var bal = {};
     names.forEach(function (n) { bal[n] = paid[n] - share[n]; });
     // 가족별 숙박(박 단위) / 그 외 — 그 외 = 부담 − 숙박 (합계가 부담과 같게)
-    var parts = {};
+    // 가족별 숙박(박 단위)도 1원 단위로 정확히 나눠 숙박 합계 = 숙박 비용 합계, 그 외 = 부담 − 숙박
+    var parts = {}, stayEx = {}, stayTotal = 0, sf = [], sFloor = 0;
+    groups.forEach(function (g) { if (g.rule === '박') stayTotal += g.total; });
+    names.forEach(function (n, i) {
+      var v = 0; groups.forEach(function (g) { if (g.rule === '박' && g.exact && g.exact[n]) v += g.exact[n]; });
+      stayEx[n] = Math.floor(v + 1e-7); sFloor += stayEx[n]; sf.push({ n: n, r: v - stayEx[n], i: i });
+    });
+    sf.sort(function (a, b) { return b.r - a.r || a.i - b.i; });
+    for (var z = 0; z < stayTotal - sFloor && z < sf.length; z++) stayEx[sf[z].n] += 1;
     names.forEach(function (n) {
-      var st = 0, ot = 0;
-      groups.forEach(function (g) { var v = (g.exact && g.exact[n]) || 0; if (g.rule === '박') st += v; else ot += v; });
-      // 숙박은 1원 단위, 그 외는 나머지 (숙박 + 그 외 = 부담)
-      st = Math.round(st);
+      var st = Math.min(stayEx[n], share[n]);
       parts[n] = { stay: st, other: share[n] - st, adj: 0 };
     });
     // 계산 근거: 같은 방법·같은 나눌 가족끼리 합쳐 "÷ 몇 가족 / 몇 명"
