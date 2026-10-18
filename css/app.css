@@ -662,3 +662,21 @@ label.toggle input, label.inline input { accent-color: var(--ds-brand); }
 .myburden { border: 0; background: var(--ds-surface); }
 .kpis b { color: var(--ds-ink); font-variant-numeric: tabular-nums; }
 .logo { filter: none; }
+
+/* ═══ 캠핑 허브 (하단 탭: 준비·식단·정산·더보기) ═══ */
+.nav button { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 52px; padding: 8px 0 6px; border: 0; background: none; color: var(--ds-muted); font: 500 11px/1.2 var(--ds-font); cursor: pointer; }
+.nav button .ic { width: 22px; height: 22px; }
+.nav button.on { color: var(--ds-brand); font-weight: 600; }
+.nav .ndot { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 16px; padding: 0 4px; border-radius: 99px;
+  background: var(--ds-warn); color: #fff; font: 700 10px/16px var(--ds-font); }
+body.hub-nav .fab { bottom: calc(env(safe-area-inset-bottom, 0px) + 76px); }
+.icon .ic { width: 24px; height: 24px; vertical-align: middle; }
+.hubhead { margin: 2px 0 14px; }
+.hubprog { display: flex; justify-content: space-between; font: 600 13px/1.3 var(--ds-font); margin-bottom: 6px; }
+.hubhead .ds-progress { margin-bottom: 10px; }
+.hubhead .ds-next { width: 100%; border: 0; color: var(--ds-ink); text-align: left; min-height: 44px; }
+.hubhead .ds-next .ic { color: var(--ds-brand); }
+.hubhead .ds-next.ok { background: var(--ds-pos-soft); color: var(--ds-pos); cursor: default; }
+.hubhead .ds-next.ok .ic { color: var(--ds-pos); }
+.stagehead > .btn { flex: none; height: 36px; min-height: 36px; padding: 0 14px; display: inline-flex; align-items: center; }

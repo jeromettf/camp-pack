@@ -126,18 +126,26 @@
   function top(title, opts) {
     opts = opts || {};
     return h('header.top',
-      opts.back ? h('button.icon', { onclick: function () { opts.back === true ? history.back() : go(opts.back); }, 'aria-label': '뒤로' }, '‹') : null,
+      opts.back ? h('button.icon', { onclick: function () { opts.back === true ? history.back() : go(opts.back); }, 'aria-label': '뒤로' }, ic('chevronL', '‹')) : null,
       h('div.ttl', h('h1', title), opts.sub ? h('div.sub', opts.sub) : null),
       opts.right || null, statusPill());
   }
   function empty(msg, action) { return h('div.empty', h('p', msg), action || null); }
 
   var NAV = [['#/', 'tent', '홈'], ['#/history', 'history', '기록'], ['#/items', 'box', '창고'], ['#/settings', 'settings', '설정']];
+  function ic(name, fb) { return window.CampIcon ? CampIcon(name) : h('span.ic', fb || '•'); }
+  var NAVX = null; // 캠핑 허브 하단 탭 (vTrip 이 채움)
   function renderNav(show, active) {
     navEl.innerHTML = '';
     navEl.hidden = !show;
+    if (NAVX) {
+      NAVX.forEach(function (n) {
+        navEl.appendChild(h('button', { type: 'button', class: n.on ? 'on' : '', onclick: n.fn }, ic(n.ic), h('span', n.label), n.dot ? h('span.ndot', String(n.dot)) : null));
+      });
+      return;
+    }
     NAV.forEach(function (n) {
-      navEl.appendChild(h('a', { href: n[0], class: active === n[0] ? 'on' : '' }, window.CampIcon ? CampIcon(n[1]) : h('span.ic', '•'), h('span', n[2])));
+      navEl.appendChild(h('a', { href: n[0], class: active === n[0] ? 'on' : '' }, ic(n[1]), h('span', n[2])));
     });
   }
 
@@ -159,6 +167,7 @@
     // 캠핑 만들기·조건 수정은 다른 화면에서 들어올 때마다 새로 시작 (중간에 나갔다 오면 예전 상태가 남던 문제)
     if ((r.parts[0] === 'new' || (r.parts[0] === 'trip' && r.parts[2] === 'edit')) && cur.name !== 'wizard') W = null;
     cur = { name: '', live: false, hash: r.raw };
+    NAVX = null;
     var el, navActive = null, showNav = true;
     var p = r.parts;
 
@@ -168,12 +177,11 @@
     else if (!p.length) { el = vHome(); navActive = '#/'; }
     else if (p[0] === 'new') { el = vWizard('new', null, r.q); showNav = false; }
     else if (p[0] === 'trip' && p[2] === 'edit') { el = vWizard('edit', p[1], r.q); showNav = false; }
-    else if (p[0] === 'trip' && p[2] === 'settle') { el = vSettle(p[1]); showNav = false; }
-    else if (p[0] === 'trip' && p[2] === 'meals') { el = vMeals(p[1]); showNav = false; }
+    else if (p[0] === 'trip' && (p[2] === 'settle' || p[2] === 'meals')) { setTripTab(p[1], p[2]); location.replace('#/trip/' + p[1]); return; }
     else if (p[0] === 'recipes') { el = vRecipes(r.q); showNav = false; }
     else if (p[0] === 'recipe') { el = vRecipe(p[1], r.q); showNav = false; }
     else if (p[0] === 'recipe-edit') { el = vRecipeEdit(p[1]); showNav = false; }
-    else if (p[0] === 'trip') { el = vTrip(p[1]); showNav = false; }
+    else if (p[0] === 'trip') { el = vTrip(p[1]); showNav = !!NAVX; }
     else if (p[0] === 'review') { location.replace('#/trip/' + p[1]); return; }
     else if (p[0] === 'history') { el = vHistory(); navActive = '#/history'; }
     else if (p[0] === 'stats') { el = vStats(); navActive = '#/history'; }
@@ -192,6 +200,7 @@
     main.appendChild(el);
     renderNav(showNav, navActive);
     document.body.classList.toggle('has-nav', showNav);
+    document.body.classList.toggle('hub-nav', !!NAVX && showNav);
     window.scrollTo(0, keepScroll || sameView ? y : 0);
     wake(cur.name === 'trip' && local.wake !== false);
   }
@@ -743,18 +752,28 @@
   /* ───────── 캠핑 화면 v2: 배정 · 현황 · 체크리스트 ───────── */
   function chkVal() { return ourName() + '|' + U.nowStr(); }
   function undecidedOf(lines) { return R.liveLines(lines).filter(function (l) { return l.party === '미정'; }); }
+  /** 허브 탭: 준비(배정·현황·체크리스트) / 식단 / 정산 */
+  var PREP = { assign: 1, status: 1, check: 1 };
   function tripTab(t, hasComp, lines) {
-    if (!hasComp) return 'check';
     var v = local.ttab && local.ttab[t.id];
-    if (v === 'assign' || v === 'status' || v === 'check' || v === 'settle') return v;
+    if (v === 'meals' || (v === 'settle' && hasComp)) return v;
+    if (!hasComp) return 'check';
+    if (PREP[v]) return v;
     if (phase(t) === '완료') return 'settle'; // 다녀온 뒤에는 정산부터
     return undecidedOf(lines).length ? 'assign' : 'check';
   }
+  function prepTabOf(t, hasComp, lines) {
+    if (!hasComp) return 'check';
+    var v = local.psub && local.psub[t.id];
+    return PREP[v] ? v : undecidedOf(lines).length ? 'assign' : 'check';
+  }
   function setTripTab(id, v, step) {
     local.ttab = local.ttab || {}; local.ttab[id] = v;
+    if (PREP[v]) { local.psub = local.psub || {}; local.psub[id] = v; }
     if (step) { local.astep = local.astep || {}; local.astep[id] = step; }
     SEL = null; saveLocal();
   }
+  function goTab(t, v, step) { setTripTab(t.id, v, step); rerender(); window.scrollTo(0, 0); }
   function byCategory(list) {
     var by = {};
     list.forEach(function (l) { var c = l.category || '안전·기타'; (by[c] = by[c] || []).push(l); });
@@ -775,25 +794,64 @@
       return h('div.page', top(t.title, { back: '#/' }), empty('체크리스트를 불러오는 중… (오프라인이면 연결 후 표시돼요)'));
     }
     var pl = placeOf(t), comps = R.parseCompanions(t.companions), hasComp = comps.length > 0;
-    var tab = tripTab(t, hasComp, lines), und = undecidedOf(lines).length;
+    var tab = tripTab(t, hasComp, lines), und = undecidedOf(lines).length, hub = PREP[tab] ? 'prep' : tab;
     // 식단이 있으면 레시피를 불러와 장보기·도구 줄을 맞춰 둠 (다른 기기·동행 가족이 바꾼 것 반영)
-    if (lines.some(function (l) { return l.kind === '메뉴'; })) { loadRecipes(); if (RCP.builtin) setTimeout(function () { if (cur.name === 'trip') syncMenu(t); }, 0); }
-    var banners = tripBanners(t, lines);
-    return h('div.page.trip-page',
-      top(t.title, {
-        back: '#/', sub: [pl ? pl.name : '', U.range(t.start, t.end), dday(t)].filter(Boolean).join(' · '),
-        right: h('button.icon', { 'aria-label': '메뉴', onclick: function () { tripMenu(t); } }, '⋯'),
-      }),
-      hasComp ? h('nav.ttabs', [['assign', '배정'], ['status', '현황'], ['check', '체크리스트'], ['settle', '정산']].map(function (x) {
-        return h('button', { class: x[0] === tab ? 'on' : '', onclick: function () { setTripTab(t.id, x[0]); rerender(); window.scrollTo(0, 0); } },
+    if (hub === 'meals' || lines.some(function (l) { return l.kind === '메뉴'; })) { loadRecipes(); if (RCP.builtin) setTimeout(function () { if (cur.name === 'trip') syncMenu(t); }, 0); }
+    var banners = hub === 'prep' ? tripBanners(t, lines) : [];
+    var selOn = SEL && SEL.on;
+    if (!selOn) {
+      NAVX = [{ ic: 'list', label: '준비', on: hub === 'prep', dot: und, fn: function () { goTab(t, prepTabOf(t, hasComp, lines)); } },
+        { ic: 'meal', label: '식단', on: hub === 'meals', fn: function () { goTab(t, 'meals'); } }];
+      if (hasComp) NAVX.push({ ic: 'wallet', label: '정산', on: hub === 'settle', fn: function () { goTab(t, 'settle'); } });
+      NAVX.push({ ic: 'more', label: '더보기', fn: function () { tripMenu(t); } });
+    }
+    var body;
+    if (hub === 'meals') body = mealsBody(t, lines);
+    else if (hub === 'settle') body = settlePanel(t, lines);
+    else body = [
+      hasComp ? h('nav.ttabs', [['assign', '배정'], ['status', '현황'], ['check', '체크리스트']].map(function (x) {
+        return h('button', { class: x[0] === tab ? 'on' : '', onclick: function () { goTab(t, x[0]); } },
           x[1], x[0] === 'assign' && und ? h('span.dot', String(und)) : null);
       })) : null,
       banners.length ? h('details.card.checks', { open: banners.length === 1 }, h('summary', '🔔 확인할 것 ', h('small', banners.length + '건')), h('div.list', banners)) : null,
-      tab === 'assign' ? assignView(t, lines) : tab === 'status' ? statusView(t, lines) : tab === 'settle' ? settlePanel(t, lines) : checkView(t, lines, hasComp),
-      tab !== 'status' && tab !== 'settle' && !(SEL && SEL.on) ? h('button.fab', { 'aria-label': '추가하기', onclick: function () {
+      tab === 'assign' ? assignView(t, lines) : tab === 'status' ? statusView(t, lines) : checkView(t, lines, hasComp)];
+    return h('div.page.trip-page',
+      top(t.title, {
+        back: '#/', sub: [pl ? pl.name : '', U.range(t.start, t.end), dday(t)].filter(Boolean).join(' · '),
+        right: h('button.icon', { 'aria-label': '캠핑 수정', onclick: function () { editGuard(t); } }, ic('pencil', '✏️')),
+      }),
+      hub !== 'settle' && !selOn ? hubHead(t, lines, hasComp, tab) : null,
+      body,
+      hub === 'prep' && tab !== 'status' && !selOn ? h('button.fab', { 'aria-label': '추가하기', onclick: function () {
         fabMenu(t, tab === 'assign' ? { shared: (local.astep && local.astep[t.id]) === 2 } : null);
       } }, '+') : null,
-      SEL && SEL.on ? selBar(t, lines) : null);
+      selOn ? selBar(t, lines) : null);
+  }
+
+  /** 허브 위쪽: 준비 진행률 + 다음 할 일 한 줄 */
+  function hubHead(t, lines, hasComp, tab) {
+    var mine = R.ourLines(lines).filter(function (l) { return l.kind !== '메뉴'; });
+    var done = mine.filter(R.isChecked).length, pct = mine.length ? Math.round(done / mine.length * 100) : 0;
+    var nx = nextTodo(t, lines, hasComp, mine.length - done, tab);
+    return h('div.hubhead',
+      h('div.hubprog', h('span', '준비 ' + pct + '%'), h('span.muted', done + '/' + mine.length)),
+      h('div.ds-progress', h('i', { style: 'width:' + pct + '%' })),
+      nx ? h('button.ds-next' + (nx.done ? '.ok' : ''), { type: 'button', onclick: nx.fn || null, disabled: !nx.fn },
+        ic(nx.done ? 'check' : 'bell'), h('span', nx.text), nx.fn ? h('span.go', ic('chevronR', '›')) : null) : null);
+  }
+  /** 지금 가장 먼저 할 일 하나 */
+  function nextTodo(t, lines, hasComp, left, tab) {
+    var ph = phase(t), und = hasComp ? undecidedOf(lines).length : 0;
+    var meals = mealsOf(lines).length, locked = !!jparse(t.settleLock, null);
+    if (ph === '완료' || ph === '보관') {
+      if (hasComp && !locked) return { text: '다녀왔어요 · 정산하기', fn: function () { goTab(t, 'settle'); } };
+      return { text: '다녀온 캠핑이에요 · 이 캠핑처럼 새 캠핑 만들기', fn: function () { W = null; go('#/new?from=' + t.id); } };
+    }
+    if (und && tab !== 'assign') return { text: '미정 ' + und + '개 · 누가 가져올지 정하기', fn: function () { goTab(t, 'assign', 2); } };
+    if (!meals && ph !== '진행중' && tab !== 'meals') return { text: '식단 정하기 · 재료가 장보기에 자동으로 들어가요', fn: function () { goTab(t, 'meals'); } };
+    if (left && tab !== 'check') return { text: '남은 준비물 ' + left + '개 챙기기', fn: function () { goTab(t, 'check'); } };
+    if (!left && !und) return { text: ph === '진행중' ? '준비 끝! 즐거운 캠핑 되세요' : '모두 챙겼어요', done: true };
+    return null;
   }
 
   /* 체크리스트: 우리 가족 전체가 같은 목록 */
@@ -802,12 +860,10 @@
     var done = mine.filter(R.isChecked).length, left = mine.length - done, onlyLeft = !!local.onlyLeft;
     var shown = onlyLeft ? mine.filter(function (l) { return !R.isChecked(l); }) : mine;
     return [
-      mealCard(t, lines),
       h('div.stagehead',
         h('div', h('b', (hasComp ? ourName() + ' · ' : '') + (mine.length ? (left ? left + '개 남음' : '모두 챙겼어요 🎉') : '목록이 비어 있어요')),
-          h('small', mine.length + '개 중 ' + done + '개 챙김 · 가족 누구 휴대폰에서 체크해도 같은 목록')),
+          h('small', '가족 누구 휴대폰에서 체크해도 같은 목록이에요')),
         h('button.viewbtn', { onclick: function () { local.onlyLeft = !onlyLeft; saveLocal(); rerender(); } }, onlyLeft ? '남은 것만 ✓' : '전체 보기')),
-      U.bar(done, mine.length),
       und.length ? h('a.alert.warn', { href: '#/trip/' + t.id, onclick: function () { setTripTab(t.id, 'assign', 2); } },
         '🤝 배정 안 된 공용 준비물 ' + und.length + '개 (' + names(und) + ') — 배정하기') : null,
       byCategory(shown).map(function (g) { return catGroup(g.name, g.lines); }),
@@ -1025,15 +1081,6 @@
     ]);
   }
 
-  /* 정산: 동행 캠핑일 때 ⋯ 메뉴에서 */
-  function vSettle(id) {
-    var t = byId('trips', id);
-    if (!t) return empty('캠핑을 찾을 수 없어요');
-    cur.name = 'settle'; cur.live = true;
-    var lines = S.linesOf(id), parties = partyList(t);
-    return h('div.page', top('💰 정산', { back: '#/trip/' + id, sub: t.title }), settlePanel(t, lines));
-  }
-
   /** 배정 화면의 "+ 추가" 버튼: 공용 배정 단계면 공용(미정)으로 바로 추가 */
   function addBtn(t, shared) {
     return h('button.viewbtn.addbtn', { onclick: function () { quickAdd(t, { shared: shared }); } }, '+ 준비물 추가');
@@ -1102,8 +1149,8 @@
     var close = U.sheet(t.title, h('div.menu',
       h('button', { onclick: function () { close(); editGuard(t); } }, '✏️ 조건 수정 (날짜·인원·동행·날씨)'),
       hasComp ? h('button', { onclick: function () { close(); U.sheet('동행 가족 링크', linkCard(t, S.linesOf(t.id), partyList(t))); } }, '🔗 동행 가족 전용 링크 보내기·끄기') : null,
-      h('button', { onclick: function () { close(); go('#/trip/' + t.id + '/meals'); } }, '🍳 식단표·메뉴'),
-      hasComp ? h('button', { onclick: function () { close(); go('#/trip/' + t.id + '/settle'); } }, '💰 정산') : null,
+      hasComp ? h('button', { onclick: function () { close(); goTab(t, 'status'); } }, '👨‍👩‍👧 가족별 준비 현황') : null,
+      h('button', { onclick: function () { close(); go('#/recipes'); } }, '📖 레시피 모음'),
       h('button', { onclick: function () { close(); editTrip(t); } }, '🏷️ 이름·메모·별점'),
       h('button', { onclick: function () { close(); W = null; go('#/new?from=' + t.id); } }, '↻ 이 캠핑처럼 새 캠핑 만들기'),
       h('button', { onclick: function () { local.wake = local.wake === false; saveLocal(); wake(local.wake !== false); close(); U.toast(local.wake !== false ? '체크리스트 화면이 꺼지지 않아요' : '화면 켜두기 해제'); } },
@@ -2853,29 +2900,9 @@
     } }, '🗑️ 식단에서 빼기')]);
   }
 
-  /** 캠핑 화면 위쪽 식단표 카드 */
-  function mealCard(t, lines) {
-    var meals = mealsOf(lines);
-    if (!meals.length) return h('a.card.mealcard.empty', { href: '#/trip/' + t.id + '/meals' },
-      h('div.kv', h('b', '🍳 식단표'), h('span.btn.small', '+ 메뉴 고르기')),
-      h('small', '레시피 100개에서 고르면 장보기·조리도구가 체크리스트에 자동으로 들어가요'));
-    var nx = Menu.nextMeal(meals, t.start, U.today(), new Date().getHours());
-    var gro = R.liveLines(lines).filter(function (l) { return l.source === '메뉴재료' && l.kind === '장보기'; });
-    var gDone = gro.filter(R.isChecked).length;
-    return h('a.card.mealcard', { href: '#/trip/' + t.id + '/meals' },
-      h('div.kv', h('b', '🍳 식단표'), h('small', '메뉴 ' + meals.length + '개')),
-      nx ? h('div.nextline', h('small', (phase(t) === '진행중' ? '다음 식사 · ' : '첫 식사 · ') + mealLabel(t, nx.meal)), h('div', nx.items.map(function (m) { return m.name; }).join(' · '))) : null,
-      gro.length ? h('small', '메뉴 재료 ' + gDone + '/' + gro.length + ' 챙김') : null,
-      h('span.morelink', '전체 식단표 ›'));
-  }
-
-  function vMeals(id) {
-    var t = byId('trips', id);
-    if (!t) return empty('캠핑을 찾을 수 없어요');
-    cur.name = 'meals'; cur.live = true;
-    loadRecipes();
-    if (RCP.builtin) setTimeout(function () { if (cur.name === 'meals') syncMenu(t); }, 0);
-    var lines = S.linesOf(id), meals = mealsOf(lines), ds = Menu.days(t.start, t.end);
+  /** 식단 탭 (캠핑 허브) */
+  function mealsBody(t, lines) {
+    var id = t.id, meals = mealsOf(lines), ds = Menu.days(t.start, t.end);
     var hasComp = R.parseCompanions(t.companions).length > 0, parties = partyList(t);
     var nd = U.today(), nh = new Date().getHours(), inTrip = phase(t) === '진행중';
     var nx = inTrip ? Menu.nextMeal(meals, t.start, nd, nh) : null;
@@ -2890,8 +2917,10 @@
         h('span.st', label), h('div.mlist', ms.length ? ms.map(itemRow) : h('span.muted', '')),
         h('button.madd', { 'aria-label': label + ' 메뉴 추가', onclick: function () { addMealSheet(t, { meal: key }); } }, '+'));
     }
-    return h('div.page', top('🍳 식단표', { back: '#/trip/' + id, sub: t.title + ' · ' + U.range(t.start, t.end) + ' · ' + peopleOf(t) + '명',
-      right: h('a.btn.small.primary', { href: '#/recipes?trip=' + id }, '+ 메뉴') }),
+    var gro = R.liveLines(lines).filter(function (l) { return l.source === '메뉴재료' && l.kind === '장보기'; });
+    return [
+      h('div.stagehead', h('div', h('b', '식단표'), h('small', peopleOf(t) + '명 · 메뉴 ' + meals.length + '개' + (gro.length ? ' · 재료 ' + gro.filter(R.isChecked).length + '/' + gro.length + ' 챙김' : ''))),
+        h('a.btn.small.primary', { href: '#/recipes?trip=' + id }, '+ 메뉴')),
       RCP.err ? h('p.err', '레시피를 불러오지 못했어요. 인터넷 연결 후 다시 열어 주세요.') : null,
       nx ? h('div.card.nextmeal',
         h('small', '다음 식사 · ' + mealLabel(t, nx.meal)),
@@ -2903,7 +2932,7 @@
           Menu.SLOTS.map(function (s) { var k = 'D' + d.n + '|' + s; return slotRow(k, s, inTrip && Menu.isPast(t.start, k, nd, nh)); }));
       }),
       h('section.mday', h('div.mday-head', '아무 때'), slotRow('any', '', false)),
-      h('p.hint', '메뉴를 누르면 레시피 보기·끼니 바꾸기·인원·담당·빼기를 할 수 있어요. 재료는 체크리스트의 장보기에 자동으로 들어가요.'));
+      h('p.hint', '메뉴를 누르면 레시피 보기·끼니 바꾸기·인원·담당·빼기를 할 수 있어요. 재료는 체크리스트의 장보기에 자동으로 들어가요.')];
   }
 
   /* 레시피 찾기 */
