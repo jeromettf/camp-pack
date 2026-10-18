@@ -132,12 +132,12 @@
   }
   function empty(msg, action) { return h('div.empty', h('p', msg), action || null); }
 
-  var NAV = [['#/', '🏕️', '홈'], ['#/history', '📖', '기록'], ['#/items', '🎒', '창고'], ['#/settings', '⚙️', '설정']];
+  var NAV = [['#/', 'tent', '홈'], ['#/history', 'history', '기록'], ['#/items', 'box', '창고'], ['#/settings', 'settings', '설정']];
   function renderNav(show, active) {
     navEl.innerHTML = '';
     navEl.hidden = !show;
     NAV.forEach(function (n) {
-      navEl.appendChild(h('a', { href: n[0], class: active === n[0] ? 'on' : '' }, h('span.ic', n[1]), h('span', n[2])));
+      navEl.appendChild(h('a', { href: n[0], class: active === n[0] ? 'on' : '' }, window.CampIcon ? CampIcon(n[1]) : h('span.ic', '•'), h('span', n[2])));
     });
   }
 
