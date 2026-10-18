@@ -156,6 +156,8 @@
     var r = parseHash();
     var sameView = r.raw === cur.hash;
     var y = window.scrollY;
+    // 캠핑 만들기·조건 수정은 다른 화면에서 들어올 때마다 새로 시작 (중간에 나갔다 오면 예전 상태가 남던 문제)
+    if ((r.parts[0] === 'new' || (r.parts[0] === 'trip' && r.parts[2] === 'edit')) && cur.name !== 'wizard') W = null;
     cur = { name: '', live: false, hash: r.raw };
     var el, navActive = null, showNav = true;
     var p = r.parts;
