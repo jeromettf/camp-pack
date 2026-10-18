@@ -1,0 +1,161 @@
+/* camp-pack 디자인 시스템 v1
+ * 라이트 = B 미니멀(흰 바탕 · 검정 주색 · 녹색/빨강 의미색), 다크 = C 캠프파이어(어두운 바탕 · 주황 주색)
+ * 휴대폰 설정(prefers-color-scheme)을 따름. 모든 화면은 아래 토큰과 부품만 사용.
+ */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
+
+:root {
+  /* 바탕·면 */
+  --ds-bg: #ffffff;
+  --ds-surface: #f6f6f7;      /* 목록 줄·입력칸 배경 */
+  --ds-card: #ffffff;
+  --ds-line: #ececee;
+  --ds-line-strong: #d4d4d8;
+  /* 글자 */
+  --ds-ink: #111111;
+  --ds-sub: #52525b;
+  --ds-muted: #a1a1aa;
+  /* 주색 (선택·주요 버튼) */
+  --ds-brand: #111111;
+  --ds-on-brand: #ffffff;
+  --ds-brand-soft: #f4f4f5;
+  /* 의미색 */
+  --ds-pos: #16a34a; --ds-pos-soft: #ecfdf3;      /* 완료·받을 돈 */
+  --ds-neg: #dc2626; --ds-neg-soft: #fef2f2;      /* 보낼 돈·삭제 */
+  --ds-warn: #c2410c; --ds-warn-soft: #fff7ed;    /* 미정·주의 */
+  --ds-stay: #6d5bd0; --ds-stay-soft: #f1effc;    /* 숙박(박 단위) */
+  /* 글꼴 */
+  --ds-font: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+  --ds-t-display: 700 28px/1.25 var(--ds-font);   /* 결론 숫자 */
+  --ds-t-title: 700 20px/1.3 var(--ds-font);      /* 화면 제목 */
+  --ds-t-head: 600 17px/1.35 var(--ds-font);      /* 카드 제목 */
+  --ds-t-body: 400 15px/1.5 var(--ds-font);       /* 본문 */
+  --ds-t-label: 500 13px/1.4 var(--ds-font);      /* 라벨·버튼(작은) */
+  --ds-t-cap: 400 12px/1.4 var(--ds-font);        /* 보조 설명 */
+  /* 간격·모양 */
+  --ds-1: 4px; --ds-2: 8px; --ds-3: 12px; --ds-4: 16px; --ds-5: 20px; --ds-6: 24px;
+  --ds-r-card: 14px; --ds-r-ctl: 10px; --ds-r-pill: 999px;
+  --ds-tap: 44px;
+  --ds-shadow: 0 1px 2px rgba(0,0,0,.04), 0 1px 1px rgba(0,0,0,.03);
+  --ds-sheet-shadow: 0 -8px 24px rgba(0,0,0,.08);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ds-bg: #161513; --ds-surface: #22201d; --ds-card: #1d1b18; --ds-line: #312e29; --ds-line-strong: #46423b;
+    --ds-ink: #ede6da; --ds-sub: #b8afa1; --ds-muted: #7d766a;
+    --ds-brand: #f2994a; --ds-on-brand: #1a1209; --ds-brand-soft: #3a2a1a;
+    --ds-pos: #7bc59a; --ds-pos-soft: #1f3327;
+    --ds-neg: #f28b82; --ds-neg-soft: #3a2220;
+    --ds-warn: #f2c14e; --ds-warn-soft: #3a3019;
+    --ds-stay: #a99cf0; --ds-stay-soft: #2a2640;
+    --ds-shadow: none; --ds-sheet-shadow: 0 -8px 24px rgba(0,0,0,.5);
+    color-scheme: dark;
+  }
+}
+
+/* ── 기본 ── */
+.ds { font: var(--ds-t-body); color: var(--ds-ink); background: var(--ds-bg); -webkit-font-smoothing: antialiased; }
+.ds .num { font-variant-numeric: tabular-nums; }
+.ds .t-display { font: var(--ds-t-display); letter-spacing: -0.02em; }
+.ds .t-title { font: var(--ds-t-title); letter-spacing: -0.01em; }
+.ds .t-head { font: var(--ds-t-head); }
+.ds .t-body { font: var(--ds-t-body); }
+.ds .t-label { font: var(--ds-t-label); }
+.ds .t-cap { font: var(--ds-t-cap); color: var(--ds-sub); }
+.ds .muted { color: var(--ds-muted); }
+.ds .pos { color: var(--ds-pos); } .ds .neg { color: var(--ds-neg); } .ds .warn { color: var(--ds-warn); }
+.ds .ic { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -4px; }
+
+/* ── 카드 ── */
+.ds-card { background: var(--ds-card); border: 1px solid var(--ds-line); border-radius: var(--ds-r-card); padding: var(--ds-4); margin-bottom: var(--ds-3); box-shadow: var(--ds-shadow); }
+.ds-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-2); margin-bottom: var(--ds-3); }
+.ds-card-head h3 { margin: 0; font: var(--ds-t-head); }
+
+/* ── 버튼 ── */
+.ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--ds-tap); padding: 0 var(--ds-4);
+  border-radius: var(--ds-r-ctl); border: 1px solid var(--ds-line-strong); background: var(--ds-card); color: var(--ds-ink); font: 600 15px/1 var(--ds-font); cursor: pointer; }
+.ds-btn.primary { background: var(--ds-brand); color: var(--ds-on-brand); border-color: var(--ds-brand); }
+.ds-btn.ghost { border-color: transparent; background: transparent; }
+.ds-btn.danger { color: var(--ds-neg); border-color: var(--ds-neg); background: transparent; }
+.ds-btn.sm { min-height: 36px; padding: 0 var(--ds-3); font-size: 13px; }
+.ds-btn.wide { width: 100%; }
+.ds-btn:disabled { opacity: .4; }
+.ds-iconbtn { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--ds-r-ctl); border: 0; background: transparent; color: var(--ds-sub); cursor: pointer; }
+.ds-iconbtn:active { background: var(--ds-surface); }
+
+/* ── 칩·세그먼트 ── */
+.ds-chips { display: flex; flex-wrap: wrap; gap: var(--ds-2); }
+.ds-chip { min-height: 36px; padding: 0 14px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong); background: var(--ds-card); color: var(--ds-ink); font: var(--ds-t-label); cursor: pointer; }
+.ds-chip.on { background: var(--ds-brand); color: var(--ds-on-brand); border-color: var(--ds-brand); }
+.ds-seg { display: flex; padding: 3px; gap: 3px; background: var(--ds-surface); border-radius: var(--ds-r-ctl); }
+.ds-seg button { flex: 1; min-height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--ds-sub); font: 600 14px/1 var(--ds-font); cursor: pointer; white-space: nowrap; }
+.ds-seg button.on { background: var(--ds-card); color: var(--ds-ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+/* ── 배지 ── */
+.ds-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--ds-r-pill); font: 600 12px/1.5 var(--ds-font); background: var(--ds-surface); color: var(--ds-sub); white-space: nowrap; }
+.ds-badge.pos { background: var(--ds-pos-soft); color: var(--ds-pos); }
+.ds-badge.neg { background: var(--ds-neg-soft); color: var(--ds-neg); }
+.ds-badge.warn { background: var(--ds-warn-soft); color: var(--ds-warn); }
+.ds-badge.stay { background: var(--ds-stay-soft); color: var(--ds-stay); }
+.ds-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+/* ── 진행률 ── */
+.ds-progress { height: 6px; border-radius: 3px; background: var(--ds-surface); overflow: hidden; }
+.ds-progress > i { display: block; height: 100%; background: var(--ds-brand); border-radius: 3px; transition: width .2s; }
+
+/* ── 목록 줄 (체크) ── */
+.ds-row { display: flex; align-items: center; gap: var(--ds-3); min-height: 52px; padding: 6px var(--ds-3); border-radius: var(--ds-r-ctl); background: var(--ds-surface); margin-bottom: 6px; cursor: pointer; }
+.ds-row .main { flex: 1; min-width: 0; }
+.ds-row .title { font: 500 15px/1.35 var(--ds-font); }
+.ds-row .meta { font: var(--ds-t-cap); color: var(--ds-sub); }
+.ds-row.done .title { color: var(--ds-muted); text-decoration: line-through; }
+.ds-check { width: 24px; height: 24px; flex: none; border-radius: 7px; border: 2px solid var(--ds-line-strong); display: inline-flex; align-items: center; justify-content: center; color: var(--ds-on-brand); }
+.ds-row.done .ds-check { background: var(--ds-brand); border-color: var(--ds-brand); }
+
+/* ── 섹션 머리 (접기) ── */
+.ds-section { display: flex; align-items: center; justify-content: space-between; padding: var(--ds-3) var(--ds-1) var(--ds-2); font: var(--ds-t-label); color: var(--ds-sub); }
+
+/* ── 결론 카드 (큰 숫자) ── */
+.ds-hero { border-radius: var(--ds-r-card); padding: var(--ds-5) var(--ds-4); text-align: center; background: var(--ds-surface); margin-bottom: var(--ds-3); }
+.ds-hero.pos { background: var(--ds-pos-soft); color: var(--ds-pos); }
+.ds-hero.neg { background: var(--ds-neg-soft); color: var(--ds-neg); }
+.ds-hero .cap { font: var(--ds-t-cap); color: var(--ds-sub); }
+
+/* ── 스테퍼 ── */
+.ds-stepper { display: inline-flex; align-items: center; border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-ctl); overflow: hidden; }
+.ds-stepper button { width: 40px; height: 40px; border: 0; background: var(--ds-card); color: var(--ds-ink); font-size: 18px; cursor: pointer; }
+.ds-stepper span { min-width: 36px; text-align: center; font: 600 15px/1 var(--ds-font); font-variant-numeric: tabular-nums; }
+
+/* ── 입력 ── */
+.ds-field { display: block; margin-bottom: var(--ds-3); }
+.ds-field .lbl { display: block; font: var(--ds-t-label); color: var(--ds-sub); margin-bottom: 6px; }
+.ds-input { width: 100%; min-height: var(--ds-tap); padding: 0 var(--ds-3); border-radius: var(--ds-r-ctl); border: 1px solid var(--ds-line-strong); background: var(--ds-card); color: var(--ds-ink); font: var(--ds-t-body); box-sizing: border-box; }
+.ds-input:focus { outline: 2px solid var(--ds-brand); outline-offset: -1px; }
+
+/* ── 알림·팁 ── */
+.ds-notice { display: flex; gap: var(--ds-2); align-items: flex-start; padding: var(--ds-3); border-radius: var(--ds-r-ctl); background: var(--ds-warn-soft); color: var(--ds-ink); font: var(--ds-t-label); margin-bottom: var(--ds-3); }
+.ds-notice.tip { background: var(--ds-surface); }
+.ds-notice .x { margin-left: auto; color: var(--ds-muted); }
+
+/* ── 표 ── */
+.ds-table { width: 100%; border-collapse: collapse; table-layout: fixed; font: 400 14px/1.4 var(--ds-font); font-variant-numeric: tabular-nums; }
+.ds-table th { font: var(--ds-t-cap); color: var(--ds-sub); text-align: right; padding: 0 4px 8px; border-bottom: 1px solid var(--ds-line); }
+.ds-table td { text-align: right; padding: 10px 4px; border-bottom: 1px solid var(--ds-line); }
+.ds-table th:first-child, .ds-table td:first-child { text-align: left; }
+.ds-table tr.total td { font-weight: 700; border-bottom: 0; border-top: 2px solid var(--ds-line-strong); }
+
+/* ── 하단 탭 ── */
+.ds-tabbar { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--ds-line); background: var(--ds-card); padding: 6px 0 calc(6px + env(safe-area-inset-bottom)); }
+.ds-tabbar button { display: flex; flex-direction: column; align-items: center; gap: 2px; border: 0; background: none; color: var(--ds-muted); font: 500 11px/1.2 var(--ds-font); min-height: var(--ds-tap); cursor: pointer; }
+.ds-tabbar button .ic { width: 22px; height: 22px; }
+.ds-tabbar button.on { color: var(--ds-brand); }
+.ds-tabbar .badge { position: absolute; }
+
+/* ── 하단 시트 ── */
+.ds-sheet { background: var(--ds-card); border-radius: 18px 18px 0 0; padding: var(--ds-2) var(--ds-4) var(--ds-5); box-shadow: var(--ds-sheet-shadow); }
+.ds-sheet .grip { width: 36px; height: 4px; border-radius: 2px; background: var(--ds-line-strong); margin: 0 auto var(--ds-3); }
+
+/* ── 다음 할 일 ── */
+.ds-next { display: flex; align-items: center; gap: var(--ds-2); padding: 10px var(--ds-3); border-radius: var(--ds-r-ctl); background: var(--ds-brand-soft); font: 500 14px/1.3 var(--ds-font); cursor: pointer; }
+.ds-next .go { margin-left: auto; color: var(--ds-sub); }

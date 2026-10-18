@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>캠핑 준비 · 스타일 가이드</title>
+<link rel="stylesheet" href="css/ds.css">
+<style>
+  body { margin: 0; }
+  .wrap { max-width: 440px; margin: 0 auto; padding: 16px 16px 40px; }
+  h1 { font: var(--ds-t-title); margin: 8px 0 4px; }
+  h2 { font: var(--ds-t-head); margin: 28px 0 10px; padding-top: 12px; border-top: 1px solid var(--ds-line); }
+  .sw { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .sw div { border-radius: 10px; height: 52px; border: 1px solid var(--ds-line); display: flex; align-items: flex-end; padding: 4px 6px; font: var(--ds-t-cap); }
+  .rowx { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .icons { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; color: var(--ds-ink); }
+  .icons span { display: flex; flex-direction: column; align-items: center; font: 400 9px/1.2 var(--ds-font); color: var(--ds-muted); gap: 4px; }
+  .phone { border: 1px solid var(--ds-line); border-radius: 22px; overflow: hidden; background: var(--ds-bg); }
+  .phone .top { display: flex; align-items: center; gap: 4px; padding: 10px 8px 6px; }
+  .phone .body { padding: 4px 14px 14px; }
+</style>
+</head>
+<body class="ds">
+<div class="wrap">
+  <h1>디자인 시스템 v1</h1>
+  <p class="t-cap">라이트 = 미니멀(B) · 다크 = 캠프파이어(C). 휴대폰 설정을 따라요.</p>
+
+  <h2>색</h2>
+  <div class="sw">
+    <div style="background:var(--ds-bg)">바탕</div>
+    <div style="background:var(--ds-surface)">면</div>
+    <div style="background:var(--ds-brand);color:var(--ds-on-brand)">주색</div>
+    <div style="background:var(--ds-ink);color:var(--ds-bg)">글자</div>
+    <div style="background:var(--ds-pos-soft);color:var(--ds-pos)">완료·받을</div>
+    <div style="background:var(--ds-neg-soft);color:var(--ds-neg)">보낼·삭제</div>
+    <div style="background:var(--ds-warn-soft);color:var(--ds-warn)">미정·주의</div>
+    <div style="background:var(--ds-stay-soft);color:var(--ds-stay)">숙박</div>
+  </div>
+
+  <h2>글자</h2>
+  <div class="t-display num">390,617원</div>
+  <div class="t-title">세이지힐 10/31</div>
+  <div class="t-head">송금할 일</div>
+  <div class="t-body">본문은 15px, 줄간격 1.5로 읽기 편하게.</div>
+  <div class="t-label">라벨·작은 버튼 13px</div>
+  <div class="t-cap">보조 설명 12px — 꼭 필요할 때만</div>
+
+  <h2>아이콘</h2>
+  <div class="icons" id="icons"></div>
+
+  <h2>버튼</h2>
+  <div class="rowx"><button class="ds-btn primary">캠핑 만들기</button><button class="ds-btn">이전</button><button class="ds-btn ghost">취소</button></div>
+  <div class="rowx"><button class="ds-btn sm" data-ic="copy">안내 복사</button><button class="ds-btn sm danger" data-ic="trash">삭제</button><button class="ds-iconbtn" data-ic="pencil" aria-label="수정"></button><button class="ds-iconbtn" data-ic="more" aria-label="더보기"></button></div>
+  <button class="ds-btn primary wide" data-ic="plus">준비물 추가</button>
+
+  <h2>칩 · 세그먼트 · 배지</h2>
+  <div class="ds-chips" style="margin-bottom:10px"><button class="ds-chip on">전체</button><button class="ds-chip">고기·구이</button><button class="ds-chip">찌개·국</button><button class="ds-chip">아침</button></div>
+  <div class="ds-seg" style="margin-bottom:10px"><button class="on">배정</button><button>현황</button><button>체크리스트</button></div>
+  <div class="rowx"><span class="ds-badge pos">받을 390,617</span><span class="ds-badge neg">보낼 213,685</span><span class="ds-badge warn">미정</span><span class="ds-badge stay">🌙 박 단위</span><span class="ds-badge"><span class="ds-dot" style="background:#2563a8"></span>수주</span></div>
+
+  <h2>입력 · 스테퍼 · 알림</h2>
+  <label class="ds-field"><span class="lbl">메뉴 이름</span><input class="ds-input" placeholder="예: 부대찌개"></label>
+  <div class="rowx"><span class="t-body">인원</span><div class="ds-stepper"><button>−</button><span>4</span><button>+</button></div></div>
+  <div class="ds-notice"><span>아이도 함께 가나요? 등록하면 수량이 맞게 계산돼요.</span><button class="ds-btn sm">등록</button></div>
+  <div class="ds-notice tip"><span>💡 줄을 왼쪽으로 밀면 빼기, 오른쪽으로 밀면 체크</span><span class="x">✕</span></div>
+
+  <h2>예시 화면 — 캠핑 허브</h2>
+  <div class="phone">
+    <div class="top"><button class="ds-iconbtn" data-ic="chevronL" aria-label="뒤로"></button><div style="flex:1"><div class="t-head">세이지힐 10/31</div><div class="t-cap">하우스플레이랩 · 10/31(토)~11/1 · D-3</div></div><button class="ds-iconbtn" data-ic="pencil" aria-label="수정"></button></div>
+    <div class="body">
+      <div style="display:flex;justify-content:space-between" class="t-label"><span>준비 72%</span><span class="muted num">52/72</span></div>
+      <div class="ds-progress" style="margin:6px 0 10px"><i style="width:72%"></i></div>
+      <div class="ds-next" style="margin-bottom:12px"><span data-ic="bell"></span><span>다음 할 일 · 미정 5개 배정하기</span><span class="go" data-ic="chevronR"></span></div>
+      <div class="ds-seg" style="margin-bottom:6px"><button>배정</button><button>현황</button><button class="on">체크리스트</button></div>
+      <div class="ds-section"><span>텐트·설치 · 2/4</span><span data-ic="chevronD"></span></div>
+      <div class="ds-row done"><span class="ds-check" data-ic="check"></span><div class="main"><div class="title">텐트</div></div></div>
+      <div class="ds-row"><span class="ds-check"></span><div class="main"><div class="title">타프 폴대 <span class="muted num">×2</span></div><div class="meta">텐트가방</div></div><button class="ds-iconbtn" data-ic="more" aria-label="더보기"></button></div>
+      <div class="ds-section"><span>음식·음료 · 0/3</span><span data-ic="chevronD"></span></div>
+      <div class="ds-row"><span class="ds-check"></span><div class="main"><div class="title">삼겹살</div><div class="meta">1.8kg · 삼겹살 구이</div></div><span class="ds-badge"><span class="ds-dot" style="background:#7a45b0"></span>해림</span></div>
+    </div>
+    <nav class="ds-tabbar"><button class="on"><span data-ic="list"></span>준비</button><button><span data-ic="meal"></span>식단</button><button><span data-ic="wallet"></span>정산</button><button><span data-ic="more"></span>더보기</button></nav>
+  </div>
+
+  <h2>예시 화면 — 정산 결과</h2>
+  <div class="phone"><div class="body" style="padding-top:14px">
+    <div class="ds-hero pos"><div class="cap">우리 가족 정산 결과</div><div class="t-display num">390,617원</div><div class="t-label">받을 돈</div></div>
+    <div class="ds-card"><div class="ds-card-head"><h3>송금할 일</h3><span class="t-cap">2/6</span></div>
+      <div class="ds-progress" style="margin-bottom:8px"><i style="width:33%;background:var(--ds-pos)"></i></div>
+      <div class="ds-row done"><span class="ds-check" data-ic="check"></span><div class="main"><div class="title">해림 → 우리 <span class="num">17,615</span></div><div class="meta">10/14 입금 확인</div></div></div>
+      <div class="ds-row"><span class="ds-check"></span><div class="main"><div class="title">태건 → 우리 <span class="num">213,685</span></div><div class="meta warn">보냈대요 · 확인 후 체크</div></div><button class="ds-btn sm" data-ic="copy">안내</button></div>
+    </div>
+    <div class="ds-card"><div class="ds-seg" style="margin-bottom:10px"><button class="on">정산표</button><button>부담 내역표</button></div>
+      <table class="ds-table"><tr><th style="width:28%">가족</th><th>부담</th><th>낸 돈</th><th>결과</th></tr>
+        <tr><td>우리</td><td>301,435</td><td>692,052</td><td class="pos">+390,617</td></tr>
+        <tr><td>태건</td><td>301,435</td><td>87,750</td><td class="neg">−213,685</td></tr>
+        <tr class="total"><td>합계</td><td>1,849,682</td><td>1,849,682</td><td>0</td></tr></table>
+    </div>
+  </div></div>
+</div>
+<script src="js/icons.js"></script>
+<script>
+  document.getElementById('icons').innerHTML = '';
+  CampIcon.names.forEach(function (n) { var s = document.createElement('span'); s.appendChild(CampIcon(n)); s.appendChild(document.createTextNode(n)); document.getElementById('icons').appendChild(s); });
+  document.querySelectorAll('[data-ic]').forEach(function (el) { el.insertBefore(CampIcon(el.getAttribute('data-ic')), el.firstChild); });
+</script>
+</body>
+</html>
