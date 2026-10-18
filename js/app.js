@@ -172,7 +172,7 @@
     var el, navActive = null, showNav = true;
     var p = r.parts;
 
-    if (p[0] === 's' && p[1]) { el = vGuest(p[1]); showNav = false; }
+    if (p[0] === 's' && p[1]) { el = vGuest(p[1]); showNav = !!NAVX; }
     else if (!S.connected() || S.status.authError) { el = vLogin(); showNav = false; }
     else if (!D().version) { el = vLoading(); showNav = false; }
     else if (!p.length) { el = vHome(); navActive = '#/'; }
@@ -977,7 +977,7 @@
       row.style.transition = 'transform .18s'; row.style.transform = '';
       if (wrap) wrap.classList.remove('r', 'l', 'go');
       if (!local.swipeTip) { local.swipeTip = 1; saveLocal(); }
-      if (dx >= TH) act.right(); else if (dx <= -TH) act.left();
+      if (dx >= TH && act.right) act.right(); else if (dx <= -TH && act.left) act.left();
     }
     row.addEventListener('touchend', end);
     row.addEventListener('touchcancel', end);
@@ -2768,9 +2768,17 @@
         l.kind === '정산' && l.addedBy === fam ? h('button.btn.danger', { onclick: function () { close(); guestSend([{ t: 'lines', id: l.id, set: { deleted: 1 } }]); } }, '삭제') : null,
         h('button.btn.primary', { onclick: function () { close(); guestSend([{ t: 'lines', id: l.id, set: { amount: amt.value.replace(/[^\d]/g, '') } }]); } }, '저장')]);
     }
-    var settleTop = U.today() > d.trip.end; // 다녀온 뒤에는 정산을 맨 위에
+    var settleTop = U.today() > d.trip.end; // 다녀온 뒤에는 정산 탭부터
+    var gtab = '';
+    try { gtab = localStorage.getItem(gKey('gt')) || ''; } catch (e) {}
+    if (gtab !== 'prep' && gtab !== 'meals' && gtab !== 'settle') gtab = settleTop ? 'settle' : 'prep';
+    function setG(v) { try { localStorage.setItem(gKey('gt'), v); } catch (e) {} rerender(); window.scrollTo(0, 0); }
+    NAVX = [{ ic: 'list', label: '준비', on: gtab === 'prep', dot: und.length, fn: function () { setG('prep'); } },
+      { ic: 'meal', label: '식단', on: gtab === 'meals', fn: function () { setG('meals'); } },
+      { ic: 'wallet', label: '정산', on: gtab === 'settle', fn: function () { setG('settle'); } }];
+    var pct = mine.length ? Math.round(done / mine.length * 100) : 0;
+    header.appendChild(h('i.topprog', { style: 'width:' + pct + '%' }));
     var settleSec = [
-      h('h2.sec', '💰 정산'),
       settleBoard({
         trip: Object.assign({ id: 'guest' }, d.trip), account: d.account,
         onSent: function (k, on, amount) {
@@ -2795,15 +2803,18 @@
         },
         onShare: function () { shareOut(d.trip.title + ' 정산', null, settleText(d.trip.title, U.range(d.trip.start, d.trip.end), d.lines, parties, d.trip.splitRule || '인원', d.trip.settleVia || 'hub', gN, d.trip, d.account)); },
       })];
-    return h('div.page', header,
-      G.err ? h('p.err', G.err) : null,
-      settleTop ? settleSec : null,
-      h('div.card.guesthead',
-        h('div.kv', h('h2', myIcon + ' ' + fam + ' 체크리스트'), h('b', done + '/' + mine.length)),
-        U.bar(done, mine.length),
-        mine.length && done === mine.length ? h('p', '🎉 다 챙겼어요!') : null),
-      mine.length ? mine.map(function (l) {
-        return h('div.line' + (l.pack ? '.done' : ''), { onclick: function () { guestSend([{ t: 'lines', id: l.id, set: { pack: l.pack ? '' : 1 } }]); } },
+    var left = mine.length - done;
+    var gnext = und.length ? { text: '아직 배정 안 된 공용 준비물 ' + und.length + '개 · 가져갈 것 고르기', fn: function () { var el = document.getElementById('g-und'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }
+      : left ? { text: '남은 준비물 ' + left + '개 챙기기' } : mine.length ? { text: '다 챙겼어요!', done: true } : null;
+    var prepSec = [
+      h('div.hubhead',
+        h('div.hubprog', h('span', myIcon + ' ' + fam + ' 준비 ' + pct + '%'), h('span.muted', done + '/' + mine.length)),
+        h('div.ds-progress', h('i', { style: 'width:' + pct + '%' })),
+        gnext ? h('button.ds-next' + (gnext.done ? '.ok' : ''), { type: 'button', onclick: gnext.fn || null, disabled: !gnext.fn },
+          ic(gnext.done ? 'check' : 'bell'), h('span', gnext.text), gnext.fn ? h('span.go', ic('chevronR', '›')) : null) : null),
+      mine.length ? mine.filter(function (l) { return !l.pack; }).concat(mine.filter(function (l) { return l.pack; })).map(function (l) {
+        function tg() { guestSend([{ t: 'lines', id: l.id, set: { pack: l.pack ? '' : 1 } }]); if (navigator.vibrate) navigator.vibrate(10); }
+        var row = h('div.line' + (l.pack ? '.done' : ''), { onclick: function () { if (row._swiped) { row._swiped = false; return; } tg(); } },
           h('span.ck', l.pack ? '✓' : ''),
           h('div.txt', h('div.nm', l.name, R.num(l.qty, 1) > 1 ? h('span.qty', '×' + l.qty) : null),
             h('div.meta', [l.scope === '우리만' ? h('span.priv', '🔒 우리만') : l.addedBy === fam ? h('span', '🤝 공유') : null,
@@ -2817,15 +2828,16 @@
                 l.scope === '우리만' ? '🤝 모두와 공유로 바꾸기' : '🔒 우리만 보기로 바꾸기') : null,
               l.addedBy === fam ? h('button.danger', { onclick: function () { close(); guestSend([{ t: 'lines', id: l.id, set: { deleted: 1 } }]); } }, '🗑️ 삭제')
                 : h('button', { onclick: function () { close(); guestSend([{ t: 'lines', id: l.id, set: { party: '미정' } }]); } }, '↩️ 우리가 못 챙겨요 (미정으로)')));
-          } }, '⋯'));
+          } }, ic('more', '⋯')));
+        swipe(row, { right: tg });
+        return h('div.swipe', h('span.sw-r', ic('check', '✓'), l.pack ? '해제' : '챙김'), h('span.sw-l'), row);
       }) : h('p.muted.center', '아래 "아직 배정 안 된 공용 준비물"에서 가져갈 것을 골라 주세요'),
       h('div.card', h('h3', '+ 우리가 더 챙길 것'), kindBox, h('div.addrow', addIn, h('button.btn', { onclick: function () {
         var n = addIn.value.trim(); if (!n) return;
         guestSend([{ t: 'lines', id: newId(), set: { kind: kind, name: n, qty: 1, scope: d.fam ? scope : '' } }]);
         U.toast(n + (d.fam && scope ? ' 추가 (🔒 우리만)' : ' 추가 (🤝 공유)'));
       } }, '추가'))),
-      guestMealsCard(d, fam, parties),
-      und.length ? h('section.grp', h('div.grp-head', h('b', '🤔 아직 배정 안 된 공용 준비물'), h('small', und.length + '개')),
+      und.length ? h('section.grp', { id: 'g-und' }, h('div.grp-head', h('b', '🤔 아직 배정 안 된 공용 준비물'), h('small', und.length + '개')),
         und.map(function (l) {
           return h('div.sline',
             h('div.txt', h('div.nm', l.name, R.num(l.qty, 1) > 1 ? h('span.qty', '×' + l.qty) : null), l.kind === '장보기' ? h('small', '장보기') : (l.note ? h('small', l.note) : null)),
@@ -2837,10 +2849,12 @@
         return h('section.grp', h('div.grp-head' + p.cls, h('b', p.icon + ' ' + p.label + ' 담당'), h('small', theirs.filter(isDone).length + '/' + theirs.length + ' 챙김')),
           h('p.others', theirs.map(function (l) { return (isDone(l) ? '✓ ' : '') + l.name; }).join(' · ')));
       }),
-      settleTop ? null : settleSec,
       h('button.btn.wide', { onclick: function () {
         shareOut(d.trip.title, null, shareText(d.trip.title, U.range(d.trip.start, d.trip.end), d.lines, parties, d.trip.splitRule || '인원', d.trip.settleVia || 'hub'));
-      } }, '📋 준비물 분담 카톡용 복사'),
+      } }, '📋 준비물 분담 카톡용 복사')];
+    return h('div.page.guest', header,
+      G.err ? h('p.err', G.err) : null,
+      gtab === 'settle' ? settleSec : gtab === 'meals' ? (guestMealsCard(d, fam, parties) || h('div.card.center', h('p', '아직 정한 메뉴가 없어요'), h('small.hint', d.ourName + '이(가) 식단을 정하면 여기에 보여요'))) : prepSec,
       h('p.ver', (d.fam ? '🔒 ' + fam + ' 전용 링크 · ' : '') + d.ourName + ' 공유 · 로그인 없이 이 캠핑에서 맡은 것만 보여요 · 체크는 바로 저장되고, 인터넷이 끊겨도 연결되면 자동 전송돼요'));
   }
 
