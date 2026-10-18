@@ -550,3 +550,10 @@ b.zero { color: var(--muted); }
 .acctform input:last-child { grid-column: 1 / -1; }
 .gcosts summary { font-weight: 600; cursor: pointer; }
 .gcosts > .card { border: 0; padding: 0; margin: 8px 0 0; box-shadow: none; }
+
+/* 지난번처럼 복사 */
+.copycard .copyrow { padding: 8px 0; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.copycard .copyrow .toggle { flex: 1; }
+.copycard .copyrow small.hint { flex-basis: 100%; margin: 0; }
+.notice { display: flex; align-items: center; gap: 8px; background: var(--warn-soft); border-radius: 10px; padding: 8px 10px; margin: 8px 0; font-size: 14px; }
+.notice span { flex: 1; }

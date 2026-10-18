@@ -28,7 +28,7 @@ var SCHEMA = {
     ['tagsRemove', '제외태그'], ['tags', '적용태그'], ['weather', '날씨'], ['status', '상태'], ['rating', '별점'],
     ['memo', '메모'], ['reviewed', '회고완료'], ['createdBy', '생성자'], ['createdAt', '생성일'], ['updatedAt', '수정일'],
     ['companions', '동행'], ['shareToken', '공유코드'], ['shareUntil', '공유만료'], ['splitRule', '정산방식'], ['settleVia', '송금방식'], ['ourPeople', '우리인원'], ['ourNights', '우리박'],
-    ['settleDone', '송금확인'], ['settleSent', '보냄표시'], ['settleLock', '정산확정']] },
+    ['settleDone', '송금확인'], ['settleSent', '보냄표시'], ['settleLock', '정산확정'], ['settlePeople', '정산인원']] },
   lines: { sheet: '체크', cols: [
     ['id', 'id'], ['tripId', '캠핑id'], ['kind', '종류'], ['itemId', '항목id'], ['name', '이름'], ['category', '카테고리'],
     ['box', '수납함'], ['qty', '수량'], ['owner', '담당자'], ['leave', '두고오기쉬움'], ['warn', '주의'], ['note', '메모'],
@@ -338,7 +338,7 @@ function shareGet_(token) {
   var comps = parseComps_(t).map(function (c) { return { name: c.name, adults: c.adults, kids: c.kids, nights: c.nights || [] }; }); // 다른 가족 링크 코드는 숨김
   return { ok: true, version: version_(), ourName: props_().getProperty('FAMILY_NAME') || '우리 가족', ourPeople: people, fam: t._fam,
     trip: { title: t.title, start: t.start, end: t.end, place: place ? place.name : '', companions: JSON.stringify(comps), splitRule: t.splitRule, settleVia: t.settleVia || 'hub', ourNights: t.ourNights || '',
-      settleDone: t.settleDone || '', settleSent: t.settleSent || '', settleLock: t.settleLock || '' },
+      settleDone: t.settleDone || '', settleSent: t.settleSent || '', settleLock: t.settleLock || '', settlePeople: t.settlePeople || '' },
     account: settleAccount_(),
     lines: lines };
 }
