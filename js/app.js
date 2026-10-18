@@ -557,7 +557,7 @@
   function condSummary(ctx) {
     var wx = R.parseWeather(W.t.weather);
     return h('div.card',
-      h('div.kv', h('h3', '🧭 이번 캠핑 조건'),
+      h('div.kv', h('h3', '이번 캠핑 조건'),
         h('button.btn.small', { onclick: function () { W.showTags = !W.showTags; rerender(); } }, W.showTags ? '접기 ▴' : '조건 바꾸기 ▾')),
       h('div.tags', ctx.tags.map(function (x) { return h('span.tag', x); })),
       h('small.hint', wx ? '🌤️ ' + wx.text + (wx.tags.length ? ' → ' + wx.tags.join(', ') + ' 자동 적용' : '')
@@ -591,7 +591,7 @@
       copyCard(),
       memoryCard(),
       h('div.card',
-        h('div.kv', h('h3', '📋 준비물 목록'),
+        h('div.kv', h('h3', '준비물 목록'),
           h('button.btn.small', { onclick: function () { W.showList = !W.showList; rerender(); } }, W.showList ? '접기 ▴' : '목록 조정하기 ▾')),
         h('p', h('b', '물건 ' + nObj + ' · 할 일 ' + nTodo), nExtra ? ' · 추가 ' + nExtra : ''),
         h('small.hint', changed ? '직접 조정한 항목 ' + changed + '개가 반영돼요.' : '조건에 맞게 자동으로 만들었어요. 대부분 그대로 만들면 돼요.')),
@@ -1571,7 +1571,7 @@
     }
     draw();
     return h('div.page', top('준비물 창고', { right: h('a.btn.small', { href: '#/recipes' }, '🍳 레시피') }), storeTabs('#/items'),
-      lint.length ? h('div.card.lint', h('h3', '⚠️ 규칙 점검 ' + lint.length + '건'), h('small.hint', '이 항목들은 조건이 잘못되어 목록에서 빠질 수 있어요'),
+      lint.length ? h('div.card.lint', h('h3', '규칙 점검 ' + lint.length + '건'), h('small.hint', '이 항목들은 조건이 잘못되어 목록에서 빠질 수 있어요'),
         lint.map(function (p) { return h('a.irow', { href: '#/item/' + p.item.id }, h('div', h('b', p.item.name || '(이름 없음)'), h('small', p.problems.join(', '))), h('span', '›')); })) : null,
       h('div.row2', search, h('a.btn.primary', { href: '#/item/new' }, '+ 추가')),
       h('a.alert', { href: '#/split' }, '🤝 공용 준비물 기본값 정하기 (동행 캠핑용) — 지금 ' + D().items.filter(function (i) { return R.active(i) && R.yes(i.shared); }).length + '개 ›'),
@@ -2055,7 +2055,7 @@
   function askCard(t, lines) {
     var shorts = lines.filter(function (l) { return l.kind === '물건' && shortOf(l) > 0; });
     if (!shorts.length) return null;
-    return h('div.card', h('h3', '🙏 부족해요 — 동행 가족에게 부탁'),
+    return h('div.card', h('h3', '부족해요 — 동행 가족에게 부탁'),
       h('small.hint', '부탁하면 미정 공용 준비물로 올라가고, 동행 가족이 "우리가 가져갈게"를 누를 수 있어요.'),
       shorts.map(function (l) {
         var askId = 'T-ask-' + l.itemId, asked = lines.filter(function (x) { return x.itemId === askId && x.deleted !== 'Y'; })[0];
@@ -2099,7 +2099,7 @@
         ], [h('button.btn.primary.wide', { onclick: function () { shareLink(c, j.token); } }, '📤 보내기 (카톡 등)')]);
       });
     }
-    return h('div.card', h('h3', '🔗 동행 가족별 전용 링크'),
+    return h('div.card', h('h3', '동행 가족별 전용 링크'),
       h('p.hint', '가족마다 다른 링크예요. 열면 로그인 없이 그 가족으로 바로 들어가서, 그 가족이 맡은 것·공용 짐·정산만 봐요. ' + U.md(until) + '에 자동으로 닫혀요.'),
       comps.map(function (c) {
         var mk = h('button.btn.small.primary', { onclick: function () { if (c.token) shareLink(c, c.token); else make(c, mk); } }, c.token ? '📤 보내기' : '🔗 링크 만들기');
@@ -2242,8 +2242,8 @@
       var rows = res.transfers.map(function (x) { return { x: x, st: sentRow(x) }; });
       var n = rows.filter(function (r) { return r.st.done; }).length;
       return h('div.card.todo2',
-        h('div.kv', h('h3', '💸 송금할 일'), h('small', n + '/' + rows.length + ' 완료')),
-        U.bar(n, rows.length),
+        h('div.kv', h('h3', '송금할 일'), h('small', n + '/' + rows.length + ' 완료')),
+        h('div.posbar', U.bar(n, rows.length)),
         n === rows.length ? h('p.alldone', '🎉 정산 완료! 모든 송금을 확인했어요') : null,
         rows.map(function (r) {
           var x = r.x, st = r.st, inbound = x.to === host.name, outbound = x.from === host.name;
@@ -2319,7 +2319,7 @@
       var mismatch = o.lines.filter(function (l) { return kids[l.id] && l.deleted !== 'Y' && kids[l.id].reduce(function (a, k) { return a + R.num(k.amount, 0); }, 0) !== R.num(l.amount, 0); });
       var groups = costGroups();
       return h('div.card',
-        h('div.kv', h('h3', '🧾 비용 내역'), h('small', groups.length + '건 · ' + won(cur0.total))),
+        h('div.kv', h('h3', '비용 내역'), h('small', groups.length + '건 · ' + won(cur0.total))),
         o.isHost ? h('small.hint', '눌러서 나누는 방법·나눌 가족을 정하거나, 나누기·묶음 풀기를 해요. 같은 이름의 비용은 자동으로 묶여요.') : h('small.hint', '나누는 방법은 ' + host.label + josa(host.label, '이', '가') + ' 정해요. 우리가 낸 비용은 눌러서 고칠 수 있어요.'),
         mismatch.length ? h('p.missing', '⚠️ ' + mismatch.map(function (l) { return l.name; }).join(', ') + ': 나눈 조각 합계가 원래 금액과 달라요.') : null,
         groups.length ? groups.map(function (g) {
@@ -2351,12 +2351,12 @@
           h('small.lbl', '송금 방법'),
           U.seg([{ value: 'hub', label: '🏠 우리가 모아서 정산' }, { value: 'direct', label: '↔ 가족끼리 바로' }], o.via, o.onVia)) : null,
         multi ? h('div.card',
-          h('h3', '🏦 받을 계좌'),
+          h('h3', '받을 계좌'),
           h('div.acctform', bank, num, holder),
           h('small.hint', '동행 가족 전용 링크의 정산 화면에 [계좌 복사]로 보여요. 한 번 저장하면 다음 캠핑에도 쓰여요.'),
           h('button.btn.wide', { onclick: function () { o.onAccount({ bank: bank.value.trim(), number: num.value.trim(), holder: holder.value.trim() }); } }, '계좌 저장')) : null,
         multi ? h('div.card.lockcard',
-          h('h3', '🔒 정산 확정'),
+          h('h3', '정산 확정'),
           lock ? h('p', String(lock.at || '') + '에 확정했어요. 총 ' + won(lock.total)) : h('small.hint', '모두 금액을 확인했으면 확정하세요. 확정하면 송금 금액이 고정되고, 동행 가족 화면에도 "정산 확정됨"이 보여요.'),
           changed ? h('p.missing', '⚠️ 확정 후 비용이 바뀌었어요. 지금 계산으로 다시 확정할 수 있어요.') : null,
           !lock || changed ? h('button.btn.primary.wide', { onclick: function () {
@@ -2629,10 +2629,10 @@
 
   function familyLoginCard(inviteLink) {
     var meta = D().meta, appUrl = location.origin + location.pathname;
-    if (!meta.pinSet) return h('div.card', h('h3', '🔐 가족 로그인'),
+    if (!meta.pinSet) return h('div.card', h('h3', '가족 로그인'),
       h('p.hint', '가족 이름과 6자리 PIN을 정하면, 가족이 새 휴대폰에서도 이 정보로 로그인할 수 있어요.'),
       h('button.btn.primary.wide', { onclick: function () { pinSheet(false); } }, '가족 이름·PIN 정하기'));
-    return h('div.card', h('h3', '🔐 가족 로그인'),
+    return h('div.card', h('h3', '가족 로그인'),
       h('div.kv', h('span', '가족 이름'), h('b', meta.familyName)),
       h('button.btn.primary.wide', { onclick: function () {
         shareOut('우리 가족 캠핑 준비', appUrl, '🏕️ 우리 가족 캠핑 준비 앱\n가족 이름: ' + meta.familyName + '\nPIN은 따로 알려줄게요!');
@@ -3016,10 +3016,10 @@
     cur.name = 'recipes';
     loadRecipes();
     var tripId = q.get('trip'), meal = q.get('meal') || '', t = tripId ? byId('trips', tripId) : null;
-    if (!RCP.builtin) return h('div.page', top('🍳 메뉴 찾기', { back: t ? '#/trip/' + t.id + '/meals' : true }),
+    if (!RCP.builtin) return h('div.page', top('메뉴 찾기', { back: t ? '#/trip/' + t.id + '/meals' : true }),
       RCP.err ? h('p.err', '레시피를 불러오지 못했어요. 인터넷 연결 후 다시 열어 주세요.') : empty('레시피 불러오는 중…'));
     var picked = t ? mealsOf(S.linesOf(t.id)).map(function (m) { return m.itemId; }) : [];
-    var listBox = h('div'), catBox = h('div'), eqBox = h('div');
+    var listBox = h('div'), catBox = h('div.hscroll'), eqBox = h('div.eqbox');
     var search = h('input', { type: 'search', placeholder: '찌개, 고기, 감바스, 아이…', value: RQ.q, oninput: function () { RQ.q = search.value; drawList(); } });
     function drawList() {
       listBox.innerHTML = '';
@@ -3043,7 +3043,7 @@
       eqBox.appendChild(U.chips(KEY_EQUIP, KEY_EQUIP.filter(function (e) { return !RQ.off[e]; }), function (v) { RQ.off[v] = !RQ.off[v]; drawFilters(); drawList(); }));
     }
     drawFilters(); drawList();
-    return h('div.page', top('🍳 메뉴 찾기', { back: t ? '#/trip/' + t.id + '/meals' : true, sub: t ? t.title + (meal && meal !== 'any' ? ' · ' + mealLabel(t, meal) : '') : '레시피 ' + recipesAll().length + '개',
+    return h('div.page', top('메뉴 찾기', { back: t ? '#/trip/' + t.id + '/meals' : true, sub: t ? t.title + (meal && meal !== 'any' ? ' · ' + mealLabel(t, meal) : '') : '레시피 ' + recipesAll().length + '개',
       right: h('a.btn.small', { href: '#/recipe-edit/new' }, '+ 내 레시피') }),
       search, catBox, eqBox, listBox);
   }
@@ -3162,7 +3162,7 @@
       if (!r) { U.toast(RCP.builtin ? '레시피가 없는 메뉴예요' : '레시피 불러오는 중…'); return; }
       U.sheet(r.name, recipeBody(r, R.num(m.qty, 4), RCP.dict).filter(Boolean));
     }
-    return h('div.card.guestmeals', h('h3', '🍳 같이 먹는 메뉴'),
+    return h('div.card.guestmeals', h('h3', '같이 먹는 메뉴'),
       order.map(function (k) {
         return h('div.gmeal', h('small.lbl', mealLabel(t, k)),
           groups[k].map(function (m) {
