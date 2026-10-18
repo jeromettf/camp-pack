@@ -128,7 +128,8 @@
     return h('header.top',
       opts.back ? h('button.icon', { onclick: function () { opts.back === true ? history.back() : go(opts.back); }, 'aria-label': '뒤로' }, ic('chevronL', '‹')) : null,
       h('div.ttl', h('h1', title), opts.sub ? h('div.sub', opts.sub) : null),
-      opts.right || null, statusPill());
+      opts.right || null, statusPill(),
+      opts.prog != null ? h('i.topprog', { style: 'width:' + opts.prog + '%' }) : null);
   }
   function empty(msg, action) { return h('div.empty', h('p', msg), action || null); }
 
@@ -819,6 +820,7 @@
       top(t.title, {
         back: '#/', sub: [pl ? pl.name : '', U.range(t.start, t.end), dday(t)].filter(Boolean).join(' · '),
         right: h('button.icon', { 'aria-label': '캠핑 수정', onclick: function () { editGuard(t); } }, ic('pencil', '✏️')),
+        prog: hub === 'prep' ? prepPct(lines) : null,
       }),
       hub !== 'settle' && !selOn ? hubHead(t, lines, hasComp, tab) : null,
       body,
@@ -828,6 +830,10 @@
       selOn ? selBar(t, lines) : null);
   }
 
+  function prepPct(lines) {
+    var mine = R.ourLines(lines).filter(function (l) { return l.kind !== '메뉴'; });
+    return mine.length ? Math.round(mine.filter(R.isChecked).length / mine.length * 100) : 0;
+  }
   /** 허브 위쪽: 준비 진행률 + 다음 할 일 한 줄 */
   function hubHead(t, lines, hasComp, tab) {
     var mine = R.ourLines(lines).filter(function (l) { return l.kind !== '메뉴'; });
@@ -866,14 +872,26 @@
         h('button.viewbtn', { onclick: function () { local.onlyLeft = !onlyLeft; saveLocal(); rerender(); } }, onlyLeft ? '남은 것만 ✓' : '전체 보기')),
       und.length ? h('a.alert.warn', { href: '#/trip/' + t.id, onclick: function () { setTripTab(t.id, 'assign', 2); } },
         '🤝 배정 안 된 공용 준비물 ' + und.length + '개 (' + names(und) + ') — 배정하기') : null,
-      byCategory(shown).map(function (g) { return catGroup(g.name, g.lines); }),
+      !local.swipeTip && mine.length ? h('div.ds-notice.tip', h('span', '💡 줄을 오른쪽으로 밀면 체크, 왼쪽으로 밀면 이번 캠핑에서 빼기'),
+        h('button.x', { 'aria-label': '닫기', onclick: function () { local.swipeTip = 1; saveLocal(); rerender(); } }, '✕')) : null,
+      byCategory(shown).map(function (g) { return catGroup(g.name, g.lines, t.id); }),
       !shown.length && mine.length ? empty('남은 게 없어요. 다 챙겼어요!') : null,
       removedCard(lines)];
   }
 
-  function catGroup(name, list) {
+  /** 다 챙긴 카테고리는 접어 둠 (머리를 누르면 펼치기·접기) */
+  function isFolded(tripId, name, all) {
+    var f = local.fold && local.fold[tripId] && local.fold[tripId][name];
+    return f == null ? all : !!f;
+  }
+  function catGroup(name, list, tripId) {
     var done = list.filter(R.isChecked).length, all = done === list.length;
-    return h('section.grp',
+    var folded = tripId ? isFolded(tripId, name, all) : false;
+    function toggleFold() {
+      local.fold = local.fold || {}; local.fold[tripId] = local.fold[tripId] || {};
+      local.fold[tripId][name] = !folded; saveLocal(); rerender();
+    }
+    return h('section.grp' + (folded ? '.folded' : ''),
       h('div.grp-head',
         h('button.gck' + (all ? '.full' : done ? '.part' : ''), { 'aria-label': name + (all ? ' 모두 해제' : ' 모두 챙김'), onclick: function () {
           var targets = list.filter(function (l) { return all ? R.isChecked(l) : !R.isChecked(l); });
@@ -882,8 +900,10 @@
           S.mutate(targets.map(function (l) { return { t: 'lines', id: l.id, set: { pack: val, done: '' } }; }));
           U.toast(name + ' ' + targets.length + '개 ' + (all ? '해제' : '챙김'), function () { S.mutate(prev); });
         } }, all ? '✓' : done ? '–' : ''),
-        h('b', name), h('small', done + '/' + list.length)),
-      list.map(lineRow));
+        tripId ? h('button.fold', { type: 'button', 'aria-expanded': String(!folded), onclick: toggleFold },
+          h('b', name), h('small', done + '/' + list.length + (folded && all ? ' · 다 챙김' : '')), ic('chevronD', '⌄'))
+          : [h('b', name), h('small', done + '/' + list.length)]),
+      folded ? null : list.filter(function (l) { return !R.isChecked(l); }).concat(list.filter(R.isChecked)).map(lineRow)); // 남은 것 먼저
   }
 
   function lineRow(l) {
@@ -895,18 +915,48 @@
       if (l.note) meta.push(h('span', l.note));
       meta = meta.slice(0, 2);
     }
-    return h('div.line' + (on ? '.done' : '') + (l.warn === 'Y' ? '.warnline' : ''), {
-      onclick: function () {
-        var prev = { pack: l.pack || '', done: l.done || '' }; // mutate 가 같은 객체를 바꾸므로 먼저 보관
-        S.mutate([{ t: 'lines', id: l.id, set: { pack: on ? '' : chkVal(), done: '' } }]);
-        if (on) U.toast(l.name + ' 체크 해제', function () { S.mutate([{ t: 'lines', id: l.id, set: prev }]); });
-        if (navigator.vibrate) navigator.vibrate(10);
-      },
+    function toggle() {
+      var prev = { pack: l.pack || '', done: l.done || '' }; // mutate 가 같은 객체를 바꾸므로 먼저 보관
+      S.mutate([{ t: 'lines', id: l.id, set: { pack: on ? '' : chkVal(), done: '' } }]);
+      if (on) U.toast(l.name + ' 체크 해제', function () { S.mutate([{ t: 'lines', id: l.id, set: prev }]); });
+      if (navigator.vibrate) navigator.vibrate(10);
+    }
+    var row = h('div.line' + (on ? '.done' : '') + (l.warn === 'Y' ? '.warnline' : ''), {
+      onclick: function () { if (row._swiped) { row._swiped = false; return; } toggle(); },
     },
       h('span.ck', { 'aria-hidden': 'true' }, on ? '✓' : ''),
       h('div.txt', h('div.nm', (l.warn === 'Y' ? '⚠️ ' : '') + l.name, R.num(l.qty, 1) > 1 ? h('span.qty', '×' + l.qty) : null),
         meta.length ? h('div.meta', meta) : null),
-      h('button.more', { 'aria-label': '편집', onclick: function (e) { e.stopPropagation(); editLine(l); } }, '⋯'));
+      h('button.more', { 'aria-label': '편집', onclick: function (e) { e.stopPropagation(); editLine(l); } }, ic('more', '⋯')));
+    swipe(row, { right: toggle, left: function () { removeLines([l]); } });
+    return h('div.swipe', h('span.sw-r', ic('check', '✓'), on ? '해제' : '챙김'), h('span.sw-l', '빼기', ic('trash', '🗑')), row);
+  }
+  /** 줄 밀기: 오른쪽 = right(), 왼쪽 = left(). 세로 스크롤은 그대로 */
+  function swipe(row, act) {
+    var x0 = 0, y0 = 0, dx = 0, mode = 0, wrap = null, TH = 80;
+    row.addEventListener('touchstart', function (e) {
+      var p = e.touches[0]; x0 = p.clientX; y0 = p.clientY; dx = 0; mode = 0; wrap = row.parentNode;
+      row.style.transition = 'none';
+    }, { passive: true });
+    row.addEventListener('touchmove', function (e) {
+      var p = e.touches[0], mx = p.clientX - x0, my = p.clientY - y0;
+      if (!mode) { if (Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my) * 1.5) mode = 1; else if (Math.abs(my) > 10) mode = -1; }
+      if (mode !== 1) return;
+      if (e.cancelable) e.preventDefault();
+      dx = Math.max(-140, Math.min(140, mx));
+      row.style.transform = 'translateX(' + dx + 'px)';
+      if (wrap) { wrap.classList.toggle('r', dx > 0); wrap.classList.toggle('l', dx < 0); wrap.classList.toggle('go', Math.abs(dx) >= TH); }
+    }, { passive: false });
+    function end() {
+      if (mode !== 1) return;
+      row._swiped = true; setTimeout(function () { row._swiped = false; }, 400);
+      row.style.transition = 'transform .18s'; row.style.transform = '';
+      if (wrap) wrap.classList.remove('r', 'l', 'go');
+      if (!local.swipeTip) { local.swipeTip = 1; saveLocal(); }
+      if (dx >= TH) act.right(); else if (dx <= -TH) act.left();
+    }
+    row.addEventListener('touchend', end);
+    row.addEventListener('touchcancel', end);
   }
 
   /* 배정: ① 우리 전용 준비물 구분 → ② 공용 준비물 배정(가족 단위) */

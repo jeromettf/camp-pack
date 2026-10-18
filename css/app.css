@@ -680,3 +680,26 @@ body.hub-nav .fab { bottom: calc(env(safe-area-inset-bottom, 0px) + 76px); }
 .hubhead .ds-next.ok { background: var(--ds-pos-soft); color: var(--ds-pos); cursor: default; }
 .hubhead .ds-next.ok .ic { color: var(--ds-pos); }
 .stagehead > .btn { flex: none; height: 36px; min-height: 36px; padding: 0 14px; display: inline-flex; align-items: center; }
+
+/* ═══ 체크리스트 편의 (3단계) ═══ */
+.top { position: sticky; }
+.topprog { position: absolute; left: 0; bottom: -1px; height: 3px; background: var(--ds-brand); border-radius: 0 2px 2px 0; transition: width .25s; }
+.grp-head { min-height: 44px; }
+.grp-head .fold { flex: 1; display: flex; align-items: center; gap: 8px; min-height: 44px; border: 0; background: none; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.grp-head .fold small { flex: 1; }
+.grp-head .fold .ic { color: var(--ds-muted); transition: transform .15s; }
+.grp.folded .grp-head .fold .ic { transform: rotate(-90deg); }
+.grp.folded { margin-bottom: 4px; }
+.grp.folded .grp-head b { color: var(--ds-muted); }
+.gck { width: 28px; height: 28px; }
+.ds-notice button.x { border: 0; background: none; padding: 0 2px; font-size: 14px; cursor: pointer; min-width: 28px; min-height: 28px; }
+.ds-notice.tip { align-items: center; }
+.line .more { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.line .ck { width: 26px; height: 26px; }
+.swipe { position: relative; margin-bottom: 6px; border-radius: var(--ds-r-ctl); overflow: hidden; }
+.swipe .line { margin: 0; position: relative; z-index: 1; touch-action: pan-y; will-change: transform; }
+.swipe > span { position: absolute; top: 0; bottom: 0; display: none; align-items: center; gap: 6px; padding: 0 18px; font: 600 13px/1 var(--ds-font); color: #fff; }
+.swipe .sw-r { left: 0; right: 0; background: var(--ds-pos); justify-content: flex-start; }
+.swipe .sw-l { left: 0; right: 0; background: var(--ds-neg); justify-content: flex-end; }
+.swipe.r .sw-r, .swipe.l .sw-l { display: flex; opacity: .55; }
+.swipe.go .sw-r, .swipe.go .sw-l { opacity: 1; }
